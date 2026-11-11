@@ -14,10 +14,24 @@ BarWidget {
   readonly property string markGlyph: "󰖟"
 
   readonly property double todayTotal: panel ? panel.todayTotal : 0
+  readonly property double currentDownBps: panel ? panel.currentDownBps : 0
+  readonly property double currentUpBps: panel ? panel.currentUpBps : 0
   readonly property string status: panel ? panel.status : "ok"
+
+  // 0: Total data for the day
+  // 1: Current data download speed
+  // 2: Current data upload speed
+  property int displayMode: 0
+
   readonly property string pillText: {
     if (root.status === "error") return root.markGlyph + " !"
-    return root.markGlyph + " " + Model.formatBytes(root.todayTotal)
+    if (root.displayMode === 1) {
+      return root.markGlyph + " ↓ " + Model.formatSpeed(root.currentDownBps)
+    } else if (root.displayMode === 2) {
+      return root.markGlyph + " ↑ " + Model.formatSpeed(root.currentUpBps)
+    } else {
+      return root.markGlyph + " " + Model.formatBytes(root.todayTotal)
+    }
   }
 
   // Panel routing contract
@@ -75,12 +89,19 @@ BarWidget {
     hasVisualContent: text !== ""
     tooltipText: panel && panel.status === "error"
       ? (panel.errorMessage || (panel.errorType === "not_installed" ? "bandwhich is not installed (sudo pacman -S bandwhich)" : "bandwhich permission required"))
-      : "Internet Usage Today: " + Model.formatBytes(root.todayTotal)
-        + (panel ? " (↓ " + Model.formatBytes(panel.todayDown) + "  ↑ " + Model.formatBytes(panel.todayUp) + ")" : "")
-        + (panel && panel.currentTotalBps > 0 ? " · " + Model.formatSpeed(panel.currentTotalBps) : "")
+      : (root.displayMode === 0 ? "Total Today: " + Model.formatBytes(root.todayTotal)
+          : (root.displayMode === 1 ? "Download Speed: " + Model.formatSpeed(root.currentDownBps)
+             : "Upload Speed: " + Model.formatSpeed(root.currentUpBps)))
+        + " (Right-click to cycle)\n"
+        + "Today: ↓ " + Model.formatBytes(panel ? panel.todayDown : 0) + "  ↑ " + Model.formatBytes(panel ? panel.todayUp : 0) + "\n"
+        + "Live: ↓ " + Model.formatSpeed(root.currentDownBps) + "  ↑ " + Model.formatSpeed(root.currentUpBps)
 
     onPressed: function(b) {
-      root.togglePanel()
+      if (b === Qt.RightButton) {
+        root.displayMode = (root.displayMode + 1) % 3
+      } else {
+        root.togglePanel()
+      }
     }
   }
 }

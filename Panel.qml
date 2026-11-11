@@ -104,8 +104,8 @@ Panel {
     bar: root.bar
     open: root.opened
     focusTarget: keyCatcher
-    contentWidth: panel.fittedContentWidth(Style.space(425))
-    contentHeight: panel.fittedContentHeight(column.implicitHeight + Style.space(24), Style.space(520))
+    contentWidth: panel.fittedContentWidth(Style.space(390))
+    contentHeight: panel.fittedContentHeight(column.implicitHeight, Style.space(520))
 
     PanelKeyCatcher {
       id: keyCatcher
@@ -115,10 +115,6 @@ Panel {
       Flickable {
         id: flick
         anchors.fill: parent
-        anchors.leftMargin: Style.space(12)
-        anchors.topMargin: Style.space(12)
-        anchors.bottomMargin: Style.space(12)
-        anchors.rightMargin: Style.space(18) // dedicated gutter so scrollbar NEVER overlaps content
         contentWidth: width
         contentHeight: column.implicitHeight
         clip: true
@@ -127,23 +123,7 @@ Panel {
         interactive: contentHeight > height
 
         ScrollBar.vertical: ScrollBar {
-          id: vbar
-          parent: panel
-          anchors.top: parent.top
-          anchors.right: parent.right
-          anchors.bottom: parent.bottom
-          anchors.topMargin: Style.space(12)
-          anchors.bottomMargin: Style.space(12)
-          anchors.rightMargin: Style.space(4)
-          policy: flick.contentHeight > flick.height ? ScrollBar.AlwaysOn : ScrollBar.AlwaysOff
-          active: flick.moving || flick.flicking || vbar.hovered
-          interactive: true
-
-          contentItem: Rectangle {
-            implicitWidth: Style.space(4)
-            radius: Style.cornerRadius
-            color: vbar.pressed ? Color.accent : (vbar.hovered ? root.fg : Qt.rgba(1, 1, 1, 0.25))
-          }
+          policy: ScrollBar.AsNeeded
         }
 
         Column {
@@ -151,68 +131,39 @@ Panel {
           width: flick.width
           spacing: Style.space(10)
 
-          // ---------- Header Row ----------
-          Item {
+          // ---------- Header Row (Clean, no redundant total badge) ----------
+          Row {
+            id: titleArea
             width: parent.width
-            implicitHeight: Math.max(titleArea.implicitHeight, totalBadge.implicitHeight)
+            spacing: Style.space(8)
 
-            Row {
-              id: titleArea
-              anchors.left: parent.left
+            Text {
+              text: "󰖟"
+              font.family: "Symbols Nerd Font"
+              font.pixelSize: Style.space(22)
+              color: root.fg
               anchors.verticalCenter: parent.verticalCenter
-              spacing: Style.space(8)
-
-              Text {
-                text: "󰖟"
-                font.family: "Symbols Nerd Font"
-                font.pixelSize: Style.space(22)
-                color: root.fg
-                anchors.verticalCenter: parent.verticalCenter
-              }
-
-              Column {
-                anchors.verticalCenter: parent.verticalCenter
-                spacing: Style.space(1)
-
-                Text {
-                  textFormat: Text.PlainText
-                  text: "Internet Usage"
-                  color: root.fg
-                  font.family: root.fontFamily
-                  font.pixelSize: Style.font.title
-                  font.bold: true
-                }
-
-                Text {
-                  textFormat: Text.PlainText
-                  text: "TODAY'S BANDWIDTH (BANDWHICH)"
-                  color: root.dimFg
-                  font.family: root.fontFamily
-                  font.pixelSize: Style.font.caption
-                }
-              }
             }
 
-            // Right header badge: Total
-            BorderSurface {
-              id: totalBadge
-              anchors.right: parent.right
+            Column {
               anchors.verticalCenter: parent.verticalCenter
-              implicitWidth: totalBadgeText.implicitWidth + Style.space(16)
-              implicitHeight: Style.space(26)
-              radius: Style.cornerRadius
-              color: Qt.rgba(1, 1, 1, 0.05)
-              borderSpec: Border.flat(Qt.rgba(1, 1, 1, 0.12), Math.max(1, Style.space(1)))
+              spacing: Style.space(1)
 
               Text {
-                id: totalBadgeText
                 textFormat: Text.PlainText
-                anchors.centerIn: parent
-                text: Model.formatBytes(root.todayTotal)
+                text: "Internet Usage"
                 color: root.fg
                 font.family: root.fontFamily
-                font.pixelSize: Style.font.body
+                font.pixelSize: Style.font.title
                 font.bold: true
+              }
+
+              Text {
+                textFormat: Text.PlainText
+                text: "TODAY'S BANDWIDTH (BANDWHICH)"
+                color: root.dimFg
+                font.family: root.fontFamily
+                font.pixelSize: Style.font.caption
               }
             }
           }
@@ -609,7 +560,7 @@ Panel {
                     anchors.left: parent.left
                     anchors.right: parent.right
                     anchors.leftMargin: Style.space(10)
-                    anchors.rightMargin: Style.space(10)
+                    anchors.rightMargin: Style.space(12)
                     anchors.verticalCenter: parent.verticalCenter
                     height: dNameText.implicitHeight
 
@@ -673,7 +624,7 @@ Panel {
                     anchors.left: parent.left
                     anchors.right: parent.right
                     anchors.leftMargin: Style.space(10)
-                    anchors.rightMargin: Style.space(10)
+                    anchors.rightMargin: Style.space(12)
                     anchors.verticalCenter: parent.verticalCenter
                     height: nameText.implicitHeight
 
@@ -782,7 +733,7 @@ Panel {
                   anchors.left: parent.left
                   anchors.right: parent.right
                   anchors.leftMargin: Style.space(10)
-                  anchors.rightMargin: Style.space(10)
+                  anchors.rightMargin: Style.space(12)
                   anchors.verticalCenter: parent.verticalCenter
                   height: curName.implicitHeight
 
@@ -915,7 +866,7 @@ Panel {
                   anchors.left: parent.left
                   anchors.right: parent.right
                   anchors.leftMargin: Style.space(10)
-                  anchors.rightMargin: Style.space(10)
+                  anchors.rightMargin: Style.space(12)
                   anchors.verticalCenter: parent.verticalCenter
                   height: dayDateText.implicitHeight
 
