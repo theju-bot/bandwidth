@@ -108,7 +108,7 @@ def save_state(state):
 def check_bandwhich():
     bandwhich_path = shutil.which("bandwhich")
     if not bandwhich_path:
-        return False, "bandwhich is not installed. Please install it (e.g. pacman -S bandwhich)."
+        return False, "not_installed", "bandwhich is not installed. Please install it (e.g. sudo pacman -S bandwhich)."
 
     try:
         proc = subprocess.run(
@@ -119,28 +119,30 @@ def check_bandwhich():
             timeout=0.6
         )
         if proc.returncode != 0 and "Insufficient permissions" in proc.stderr:
-            return False, "Insufficient permissions. Run: sudo setcap 'cap_sys_ptrace,cap_dac_read_search,cap_net_raw,cap_net_admin+ep' /usr/bin/bandwhich"
+            return False, "permission", f"Insufficient permissions. Run: sudo setcap 'cap_sys_ptrace,cap_dac_read_search,cap_net_raw,cap_net_admin+ep' {bandwhich_path}"
     except subprocess.TimeoutExpired:
-        return True, ""
+        return True, "", ""
     except Exception as e:
-        return False, str(e)
+        return False, "error", str(e)
 
-    return True, ""
+    return True, "", ""
 
 def run_daemon():
     bandwhich_bin = shutil.which("bandwhich") or "/usr/bin/bandwhich"
-    ok, err_msg = check_bandwhich()
+    ok, err_type, err_msg = check_bandwhich()
     if not ok:
         state = load_state()
         state["status"] = "error"
+        state["error_type"] = err_type
         state["error"] = err_msg
         save_state(state)
         sys.stderr.write(f"{err_msg}\n")
         while True:
             time.sleep(5)
-            ok, err_msg = check_bandwhich()
+            ok, err_type, err_msg = check_bandwhich()
             if ok:
                 break
+            state["error_type"] = err_type
             state["error"] = err_msg
             save_state(state)
 
@@ -148,6 +150,8 @@ def run_daemon():
     state["status"] = "ok"
     if "error" in state:
         del state["error"]
+    if "error_type" in state:
+        del state["error_type"]
 
     while True:
         try:
@@ -160,6 +164,7 @@ def run_daemon():
             )
         except Exception as e:
             state["status"] = "error"
+            state["error_type"] = "error"
             state["error"] = str(e)
             save_state(state)
             time.sleep(5)
@@ -216,13 +221,23 @@ def run_daemon():
         stderr_output = proc.stderr.read() if proc.stderr else ""
         if "Insufficient permissions" in stderr_output:
             state["status"] = "error"
+            state["error_type"] = "permission"
             state["error"] = "Insufficient permissions. Run: sudo setcap 'cap_sys_ptrace,cap_dac_read_search,cap_net_raw,cap_net_admin+ep' /usr/bin/bandwhich"
             save_state(state)
 
         time.sleep(2)
 
 def run_status():
+    ok, err_type, err_msg = check_bandwhich()
     state = load_state()
+
+    status_val = state.get("status", "ok")
+    error_val = state.get("error", "")
+    error_type_val = state.get("error_type", "")
+    if not ok:
+        status_val = "error"
+        error_val = err_msg
+        error_type_val = err_type
     today_down = state.get("today_down", 0)
     today_up = state.get("today_up", 0)
     today_date = state.get("date", get_today_str())
@@ -280,8 +295,9 @@ def run_status():
         "today_down": today_down,
         "today_up": today_up,
         "total": today_down + today_up,
-        "status": state.get("status", "ok"),
-        "error": state.get("error", ""),
+        "status": status_val,
+        "error": error_val,
+        "error_type": error_type_val,
         "top_downloads": top_downloads[:10],
         "top_uploads": top_uploads[:10],
         "minimalistic": cfg.get("minimalistic", False),

@@ -74,7 +74,7 @@ BarWidget {
     horizontalMargin: 6
     hasVisualContent: text !== ""
     tooltipText: panel && panel.status === "error"
-      ? (panel.errorMessage || "bandwhich permission required")
+      ? (panel.errorMessage || (panel.errorType === "not_installed" ? "bandwhich is not installed (sudo pacman -S bandwhich)" : "bandwhich permission required"))
       : "Internet Usage Today: " + Model.formatBytes(root.todayTotal)
         + (panel ? " (↓ " + Model.formatBytes(panel.todayDown) + "  ↑ " + Model.formatBytes(panel.todayUp) + ")" : "")
 

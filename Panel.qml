@@ -25,6 +25,7 @@ Panel {
   property double todayTotal: 0
   property string status: "ok"
   property string errorMessage: ""
+  property string errorType: ""
   property var topDownloads: []
   property var topUploads: []
   property var daysHistory: []
@@ -85,6 +86,7 @@ Panel {
           root.todayTotal = Number(d.total) || (root.todayDown + root.todayUp);
           root.status = d.status || "ok";
           root.errorMessage = d.error || "";
+          root.errorType = d.error_type || (root.errorMessage.indexOf("not installed") !== -1 ? "not_installed" : "permission");
           root.topDownloads = d.top_downloads || [];
           root.topUploads = d.top_uploads || [];
           root.daysHistory = d.days || [];
@@ -379,7 +381,9 @@ Panel {
                 Text { text: "⚠️"; font.pixelSize: Style.font.body }
                 Text {
                   textFormat: Text.PlainText
-                  text: "Packet capture permission needed"
+                  text: root.errorType === "not_installed"
+                    ? "bandwhich is not installed"
+                    : "Packet capture permission needed"
                   color: "#f87171"
                   font.family: root.fontFamily
                   font.pixelSize: Style.font.body
@@ -391,7 +395,9 @@ Panel {
                 textFormat: Text.PlainText
                 width: parent.width
                 wrapMode: Text.Wrap
-                text: "bandwhich needs network packet inspection capabilities. Run in terminal:"
+                text: root.errorType === "not_installed"
+                  ? "Install bandwhich using your package manager to enable tracking:"
+                  : "bandwhich needs network packet inspection capabilities. Run in terminal:"
                 color: root.fg
                 font.family: root.fontFamily
                 font.pixelSize: Style.font.caption
@@ -412,7 +418,9 @@ Panel {
                   font.family: "monospace"
                   font.pixelSize: Style.font.caption
                   color: "#68d391"
-                  text: "sudo setcap 'cap_sys_ptrace,cap_dac_read_search,cap_net_raw,cap_net_admin+ep' /usr/bin/bandwhich"
+                  text: root.errorType === "not_installed"
+                    ? "sudo pacman -S bandwhich"
+                    : "sudo setcap 'cap_sys_ptrace,cap_dac_read_search,cap_net_raw,cap_net_admin+ep' $(which bandwhich)"
                 }
               }
             }
