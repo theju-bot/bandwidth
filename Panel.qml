@@ -127,7 +127,7 @@ Panel {
         Column {
           id: column
           width: flick.width
-          spacing: Style.space(10)
+          spacing: Style.space(8)
 
           // ---------- Header Row ----------
           Row {
@@ -136,7 +136,7 @@ Panel {
             spacing: Style.space(8)
 
             Text {
-              text: "󰖟"
+              text: "󱘖"
               font.family: "Symbols Nerd Font"
               font.pixelSize: Style.space(22)
               color: root.fg
@@ -166,171 +166,151 @@ Panel {
             }
           }
 
-          // ---------- Cumulative Traffic (Upload on left, Download on right, then Total) ----------
+          // ---------- Bandwidth Metric Cards (Upload on left, Download on right, Live speeds beneath) ----------
           Row {
-            spacing: Style.space(10)
-            anchors.left: parent.left
+            width: parent.width
+            spacing: Style.space(8)
 
-            // Upload
+            // Upload Metric Card
+            BorderSurface {
+              id: upMetricCard
+              width: Math.floor((parent.width - Style.space(8)) / 2)
+              implicitHeight: Style.space(60)
+              color: Qt.rgba(1, 1, 1, 0.03)
+              radius: Style.cornerRadius
+              borderSpec: Border.flat(Qt.rgba(1, 1, 1, 0.06), Math.max(1, Style.space(1)))
+
+              Column {
+                anchors.centerIn: parent
+                spacing: Style.space(2)
+
+                Text {
+                  anchors.horizontalCenter: parent.horizontalCenter
+                  textFormat: Text.PlainText
+                  text: "↑ Upload"
+                  color: root.upAccent
+                  font.family: root.fontFamily
+                  font.pixelSize: Style.font.caption
+                  font.bold: true
+                }
+
+                Text {
+                  anchors.horizontalCenter: parent.horizontalCenter
+                  textFormat: Text.PlainText
+                  text: Model.formatBytes(root.todayUp)
+                  color: root.upAccent
+                  font.family: root.fontFamily
+                  font.pixelSize: Style.space(18)
+                  font.bold: true
+                }
+
+                Row {
+                  anchors.horizontalCenter: parent.horizontalCenter
+                  spacing: Style.space(3)
+
+                  Text {
+                    textFormat: Text.PlainText
+                    text: "Live:"
+                    color: root.dimFg
+                    font.family: root.fontFamily
+                    font.pixelSize: Style.font.caption
+                  }
+
+                  Text {
+                    textFormat: Text.PlainText
+                    text: Model.formatSpeed(root.currentUpBps)
+                    color: root.upAccent
+                    font.family: root.fontFamily
+                    font.pixelSize: Style.font.caption
+                    font.bold: true
+                  }
+                }
+              }
+            }
+
+            // Download Metric Card
+            BorderSurface {
+              id: downMetricCard
+              width: parent.width - Style.space(8) - upMetricCard.width
+              implicitHeight: Style.space(60)
+              color: Qt.rgba(1, 1, 1, 0.03)
+              radius: Style.cornerRadius
+              borderSpec: Border.flat(Qt.rgba(1, 1, 1, 0.06), Math.max(1, Style.space(1)))
+
+              Column {
+                anchors.centerIn: parent
+                spacing: Style.space(2)
+
+                Text {
+                  anchors.horizontalCenter: parent.horizontalCenter
+                  textFormat: Text.PlainText
+                  text: "↓ Download"
+                  color: root.downAccent
+                  font.family: root.fontFamily
+                  font.pixelSize: Style.font.caption
+                  font.bold: true
+                }
+
+                Text {
+                  anchors.horizontalCenter: parent.horizontalCenter
+                  textFormat: Text.PlainText
+                  text: Model.formatBytes(root.todayDown)
+                  color: root.downAccent
+                  font.family: root.fontFamily
+                  font.pixelSize: Style.space(18)
+                  font.bold: true
+                }
+
+                Row {
+                  anchors.horizontalCenter: parent.horizontalCenter
+                  spacing: Style.space(3)
+
+                  Text {
+                    textFormat: Text.PlainText
+                    text: "Live:"
+                    color: root.dimFg
+                    font.family: root.fontFamily
+                    font.pixelSize: Style.font.caption
+                  }
+
+                  Text {
+                    textFormat: Text.PlainText
+                    text: Model.formatSpeed(root.currentDownBps)
+                    color: root.downAccent
+                    font.family: root.fontFamily
+                    font.pixelSize: Style.font.caption
+                    font.bold: true
+                  }
+                }
+              }
+            }
+          }
+
+          // Total Transferred (Subtle secondary metric)
+          Item {
+            width: parent.width
+            implicitHeight: totalRow.implicitHeight
+
             Row {
-              spacing: Style.space(4)
-              anchors.verticalCenter: parent.verticalCenter
-              Text {
-                textFormat: Text.PlainText
-                text: "↑"
-                color: root.upAccent
-                font.family: root.fontFamily
-                font.pixelSize: Style.font.body
-                font.bold: true
-                anchors.verticalCenter: parent.verticalCenter
-              }
-              Text {
-                textFormat: Text.PlainText
-                text: Model.formatBytes(root.todayUp)
-                color: root.upAccent
-                font.family: root.fontFamily
-                font.pixelSize: Style.font.body
-                font.bold: true
-                anchors.verticalCenter: parent.verticalCenter
-              }
-            }
+              id: totalRow
+              anchors.centerIn: parent
+              spacing: Style.space(6)
 
-            Text {
-              textFormat: Text.PlainText
-              text: "·"
-              color: root.dimFg
-              font.family: root.fontFamily
-              font.pixelSize: Style.font.body
-              anchors.verticalCenter: parent.verticalCenter
-            }
-
-            // Download
-            Row {
-              spacing: Style.space(4)
-              anchors.verticalCenter: parent.verticalCenter
               Text {
                 textFormat: Text.PlainText
-                text: "↓"
-                color: root.downAccent
-                font.family: root.fontFamily
-                font.pixelSize: Style.font.body
-                font.bold: true
-                anchors.verticalCenter: parent.verticalCenter
-              }
-              Text {
-                textFormat: Text.PlainText
-                text: Model.formatBytes(root.todayDown)
-                color: root.downAccent
-                font.family: root.fontFamily
-                font.pixelSize: Style.font.body
-                font.bold: true
-                anchors.verticalCenter: parent.verticalCenter
-              }
-            }
-
-            Text {
-              textFormat: Text.PlainText
-              text: "·"
-              color: root.dimFg
-              font.family: root.fontFamily
-              font.pixelSize: Style.font.body
-              anchors.verticalCenter: parent.verticalCenter
-            }
-
-            // Total
-            Row {
-              spacing: Style.space(4)
-              anchors.verticalCenter: parent.verticalCenter
-              Text {
-                textFormat: Text.PlainText
-                text: "Total:"
+                text: "Total data today:"
                 color: root.dimFg
                 font.family: root.fontFamily
-                font.pixelSize: Style.font.body
-                font.bold: true
-                anchors.verticalCenter: parent.verticalCenter
+                font.pixelSize: Style.font.caption
               }
+
               Text {
                 textFormat: Text.PlainText
                 text: Model.formatBytes(root.todayTotal)
                 color: root.fg
                 font.family: root.fontFamily
-                font.pixelSize: Style.font.body
-                font.bold: true
-                anchors.verticalCenter: parent.verticalCenter
-              }
-            }
-          }
-
-          // ---------- Current Speed (Upload speed on left, Download speed on right) ----------
-          Row {
-            spacing: Style.space(10)
-            anchors.left: parent.left
-
-            Text {
-              textFormat: Text.PlainText
-              text: "Current:"
-              color: root.dimFg
-              font.family: root.fontFamily
-              font.pixelSize: Style.font.caption
-              font.bold: true
-              anchors.verticalCenter: parent.verticalCenter
-            }
-
-            // Upload speed
-            Row {
-              spacing: Style.space(4)
-              anchors.verticalCenter: parent.verticalCenter
-              Text {
-                textFormat: Text.PlainText
-                text: "↑"
-                color: root.upAccent
-                font.family: root.fontFamily
                 font.pixelSize: Style.font.caption
                 font.bold: true
-                anchors.verticalCenter: parent.verticalCenter
-              }
-              Text {
-                textFormat: Text.PlainText
-                text: Model.formatSpeed(root.currentUpBps)
-                color: root.upAccent
-                font.family: root.fontFamily
-                font.pixelSize: Style.font.caption
-                font.bold: true
-                anchors.verticalCenter: parent.verticalCenter
-              }
-            }
-
-            Text {
-              textFormat: Text.PlainText
-              text: "·"
-              color: root.dimFg
-              font.family: root.fontFamily
-              font.pixelSize: Style.font.caption
-              anchors.verticalCenter: parent.verticalCenter
-            }
-
-            // Download speed
-            Row {
-              spacing: Style.space(4)
-              anchors.verticalCenter: parent.verticalCenter
-              Text {
-                textFormat: Text.PlainText
-                text: "↓"
-                color: root.downAccent
-                font.family: root.fontFamily
-                font.pixelSize: Style.font.caption
-                font.bold: true
-                anchors.verticalCenter: parent.verticalCenter
-              }
-              Text {
-                textFormat: Text.PlainText
-                text: Model.formatSpeed(root.currentDownBps)
-                color: root.downAccent
-                font.family: root.fontFamily
-                font.pixelSize: Style.font.caption
-                font.bold: true
-                anchors.verticalCenter: parent.verticalCenter
               }
             }
           }
@@ -409,15 +389,17 @@ Panel {
 
           // ==========================================
           // TEXT TABS: Overview | Live Activity | Usage History
-          // (Clean text with underline active indicator)
+          // (3 equal sections: 33.33% each, centered labels and indicators)
           // ==========================================
           Row {
+            id: tabsRow
             width: parent.width
-            spacing: Style.space(20)
+            spacing: 0
 
             // Tab 0: Overview
             Item {
-              width: tab0Txt.implicitWidth
+              id: tab0
+              width: Math.floor(parent.width / 3)
               height: Style.space(28)
 
               Text {
@@ -435,8 +417,8 @@ Panel {
               Rectangle {
                 visible: root.currentTab === 0
                 anchors.bottom: parent.bottom
-                anchors.left: parent.left
-                anchors.right: parent.right
+                anchors.horizontalCenter: parent.horizontalCenter
+                width: tab0Txt.implicitWidth
                 height: 2
                 radius: 1
                 color: root.downAccent
@@ -451,7 +433,8 @@ Panel {
 
             // Tab 1: Live Activity
             Item {
-              width: tab1Txt.implicitWidth
+              id: tab1
+              width: Math.floor(parent.width / 3)
               height: Style.space(28)
 
               Text {
@@ -469,8 +452,8 @@ Panel {
               Rectangle {
                 visible: root.currentTab === 1
                 anchors.bottom: parent.bottom
-                anchors.left: parent.left
-                anchors.right: parent.right
+                anchors.horizontalCenter: parent.horizontalCenter
+                width: tab1Txt.implicitWidth
                 height: 2
                 radius: 1
                 color: root.upAccent
@@ -485,7 +468,8 @@ Panel {
 
             // Tab 2: Usage History
             Item {
-              width: tab2Txt.implicitWidth
+              id: tab2
+              width: parent.width - tab0.width - tab1.width
               height: Style.space(28)
 
               Text {
@@ -503,8 +487,8 @@ Panel {
               Rectangle {
                 visible: root.currentTab === 2
                 anchors.bottom: parent.bottom
-                anchors.left: parent.left
-                anchors.right: parent.right
+                anchors.horizontalCenter: parent.horizontalCenter
+                width: tab2Txt.implicitWidth
                 height: 2
                 radius: 1
                 color: root.fg
@@ -561,7 +545,7 @@ Panel {
               Text {
                 id: ovDownHeader
                 anchors.right: parent.right
-                anchors.rightMargin: Style.space(12)
+                anchors.rightMargin: Style.space(10)
                 anchors.verticalCenter: parent.verticalCenter
                 width: Style.space(85)
                 horizontalAlignment: Text.AlignRight
@@ -598,7 +582,7 @@ Panel {
                   anchors.left: parent.left
                   anchors.right: parent.right
                   anchors.leftMargin: Style.space(10)
-                  anchors.rightMargin: Style.space(12)
+                  anchors.rightMargin: Style.space(10)
                   anchors.verticalCenter: parent.verticalCenter
                   height: ovName.implicitHeight
 
@@ -702,7 +686,7 @@ Panel {
               Text {
                 id: liveDownHeader
                 anchors.right: parent.right
-                anchors.rightMargin: Style.space(12)
+                anchors.rightMargin: Style.space(10)
                 anchors.verticalCenter: parent.verticalCenter
                 width: Style.space(85)
                 horizontalAlignment: Text.AlignRight
@@ -739,7 +723,7 @@ Panel {
                   anchors.left: parent.left
                   anchors.right: parent.right
                   anchors.leftMargin: Style.space(10)
-                  anchors.rightMargin: Style.space(12)
+                  anchors.rightMargin: Style.space(10)
                   anchors.verticalCenter: parent.verticalCenter
                   height: curName.implicitHeight
 
@@ -843,7 +827,7 @@ Panel {
               Text {
                 id: histDownHeader
                 anchors.right: parent.right
-                anchors.rightMargin: Style.space(12)
+                anchors.rightMargin: Style.space(10)
                 anchors.verticalCenter: parent.verticalCenter
                 width: Style.space(85)
                 horizontalAlignment: Text.AlignRight
@@ -880,7 +864,7 @@ Panel {
                   anchors.left: parent.left
                   anchors.right: parent.right
                   anchors.leftMargin: Style.space(10)
-                  anchors.rightMargin: Style.space(12)
+                  anchors.rightMargin: Style.space(10)
                   anchors.verticalCenter: parent.verticalCenter
                   height: dayDateText.implicitHeight
 

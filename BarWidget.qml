@@ -11,7 +11,7 @@ BarWidget {
   moduleName: "theju-bot.bandwidth"
 
   readonly property var panel: panelLoader.item
-  readonly property string markGlyph: "󰖟"
+  readonly property string markGlyph: "󱘖"
 
   readonly property double todayTotal: panel ? panel.todayTotal : 0
   readonly property double currentDownBps: panel ? panel.currentDownBps : 0

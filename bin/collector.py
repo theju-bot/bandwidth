@@ -264,18 +264,21 @@ def run_status():
             })
     current_apps.sort(key=lambda x: x["total_bps"], reverse=True)
 
-    # Build cumulative apps list
+    # Build cumulative apps list (ranked by total = download + upload descending)
     apps_raw = state.get("apps", {})
     all_apps = []
     for name, stats in apps_raw.items():
         d = stats.get("down", 0)
         u = stats.get("up", 0)
-        all_apps.append({
-            "name": name,
-            "down": d,
-            "up": u,
-            "total": d + u
-        })
+        tot = d + u
+        if tot > 0:
+            all_apps.append({
+                "name": name,
+                "down": d,
+                "up": u,
+                "total": tot
+            })
+    all_apps.sort(key=lambda x: x["total"], reverse=True)
 
     # Top downloads (sorted down descending)
     top_downloads = [a for a in all_apps if a["down"] > 0]
