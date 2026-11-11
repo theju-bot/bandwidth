@@ -7,13 +7,13 @@ Daily internet bandwidth monitor plugin for Omarchy / Quickshell. Shows live dai
 ## Features
 
 - **Status Bar Widget**: Shows live daily internet usage (`󰖟 2.6 GB`) directly in the top bar.
-- **Detailed Popup Panel**:
-  - Live summary of total, download (`↓`), and upload (`↑`) traffic.
-  - **Downloads Tab**: Top applications sorted by downloaded bytes with friendly names and icons.
-  - **Uploads Tab**: Top applications sorted by uploaded bytes.
-  - **History Tab**: Daily data consumption for the last 30 days.
-  - **Minimal Mode**: Toggle button to switch between full icon cards and a compact, clean text layout.
-- **Efficient & Safe**: Runs a lightweight Python accumulator daemon communicating with `bandwhich` via JSON streaming. UI preferences (`config.json`) and usage data (`stats.json`) are cleanly decoupled.
+- **Minimal, Clean Popup Panel**:
+  - Live summary with upload on the left, then download, then total (`↑ 798 MB · ↓ 5.5 GB · Total: 6.3 GB`).
+  - **Usage Tab**: Overview with side-by-side Upload and Download metric cards, traffic proportion bar, and top processes.
+  - **Current Tab**: Live per-process data usage breakdown for all active applications.
+  - **History Tab**: Daily data consumption archive for the past 14 days.
+  - **VPN & Proxy Support**: Inspects raw socket packets directly, allowing accurate process-level traffic tracking even when routing through VPNs or proxies (v2ray, WireGuard, OpenVPN, Tailscale, etc.).
+- **Efficient & Lightweight**: Minimalist design with zero unnecessary emoji bloat. Background accumulator daemon communicates with `bandwhich` via JSON streaming without high CPU overhead.
 
 ---
 

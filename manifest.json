@@ -14,7 +14,7 @@
   },
   "barWidget": {
     "displayName": "Bandwidth",
-    "description": "Daily internet bandwidth monitor with per-app breakdown, downloads/uploads tabs, and 30-day history.",
+    "description": "Daily internet bandwidth monitor with per-app breakdown, Usage/Current/History tabs, and daily archive.",
     "category": "Network",
     "aliases": [
       "bandwidth",

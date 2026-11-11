@@ -76,7 +76,7 @@ BarWidget {
     tooltipText: panel && panel.status === "error"
       ? (panel.errorMessage || (panel.errorType === "not_installed" ? "bandwhich is not installed (sudo pacman -S bandwhich)" : "bandwhich permission required"))
       : "Internet Usage Today: " + Model.formatBytes(root.todayTotal)
-        + (panel ? " (↓ " + Model.formatBytes(panel.todayDown) + "  ↑ " + Model.formatBytes(panel.todayUp) + ")" : "")
+        + (panel ? " (↑ " + Model.formatBytes(panel.todayUp) + "  ↓ " + Model.formatBytes(panel.todayDown) + ")" : "")
 
     onPressed: function(b) {
       root.togglePanel()

@@ -255,6 +255,9 @@ def run_status():
             "total": d + u
         })
 
+    # Sort all_apps by total descending (for the "Current" tab)
+    all_apps.sort(key=lambda x: x["total"], reverse=True)
+
     # Top downloads (sorted down descending, only apps with down > 0)
     top_downloads = [a for a in all_apps if a["down"] > 0]
     top_downloads.sort(key=lambda x: x["down"], reverse=True)
@@ -289,7 +292,6 @@ def run_status():
             "is_today": False
         })
 
-    cfg = load_config()
     result = {
         "date": today_date,
         "today_down": today_down,
@@ -298,9 +300,9 @@ def run_status():
         "status": status_val,
         "error": error_val,
         "error_type": error_type_val,
+        "current_apps": all_apps[:25],
         "top_downloads": top_downloads[:10],
         "top_uploads": top_uploads[:10],
-        "minimalistic": cfg.get("minimalistic", False),
         "days": days[:14]
     }
     print(json.dumps(result))
@@ -308,10 +310,5 @@ def run_status():
 if __name__ == "__main__":
     if len(sys.argv) > 1 and sys.argv[1] == "daemon":
         run_daemon()
-    elif len(sys.argv) > 1 and sys.argv[1] == "set-minimal":
-        val = sys.argv[2].lower() in ("true", "1", "yes") if len(sys.argv) > 2 else False
-        cfg = load_config()
-        cfg["minimalistic"] = val
-        save_config(cfg)
     else:
         run_status()
