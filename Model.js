@@ -10,6 +10,18 @@ function formatBytes(bytes) {
   return (i === 0 ? b.toFixed(0) : b.toFixed(b < 10 ? 1 : 0)) + " " + units[i];
 }
 
+function formatSpeed(bytesPerSec) {
+  var b = Number(bytesPerSec) || 0;
+  if (b <= 0) return "0 B/s";
+  var units = ["B/s", "KB/s", "MB/s", "GB/s"];
+  var i = 0;
+  while (b >= 1024 && i < units.length - 1) {
+    b /= 1024.0;
+    i++;
+  }
+  return (i === 0 ? b.toFixed(0) : b.toFixed(b < 10 ? 1 : 0)) + " " + units[i];
+}
+
 function formatDate(dateStr, isToday) {
   if (isToday) return "Today";
   if (!dateStr) return "";

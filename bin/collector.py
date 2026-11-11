@@ -21,25 +21,6 @@ if not STATE_DIR.exists() and LEGACY_DIR.exists():
 STATE_FILE = STATE_DIR / "stats.json"
 CONFIG_FILE = STATE_DIR / "config.json"
 
-def load_config():
-    if CONFIG_FILE.exists():
-        try:
-            with open(CONFIG_FILE, "r", encoding="utf-8") as f:
-                return json.load(f)
-        except Exception:
-            pass
-    return {}
-
-def save_config(cfg):
-    STATE_DIR.mkdir(parents=True, exist_ok=True)
-    tmp_file = CONFIG_FILE.with_suffix(".tmp")
-    try:
-        with open(tmp_file, "w", encoding="utf-8") as f:
-            json.dump(cfg, f)
-        os.replace(tmp_file, CONFIG_FILE)
-    except Exception as e:
-        sys.stderr.write(f"Error saving config: {e}\n")
-
 LINE_REGEX = re.compile(r'process:\s+<\d+>\s+"([^"]+)"\s+up/down\s+Bps:\s+(\d+)/(\d+)')
 
 def get_today_str():
@@ -56,7 +37,6 @@ def load_state():
                 history = data.get("history", {})
 
                 if file_date != today:
-                    # Archive previous day if it had traffic
                     prev_down = data.get("today_down", 0)
                     prev_up = data.get("today_up", 0)
                     if prev_down > 0 or prev_up > 0:
@@ -66,7 +46,6 @@ def load_state():
                             "total": prev_down + prev_up
                         }
 
-                    # Prune history to 30 days
                     sorted_dates = sorted(history.keys(), reverse=True)
                     if len(sorted_dates) > 30:
                         history = {d: history[d] for d in sorted_dates[:30]}
@@ -77,7 +56,10 @@ def load_state():
                         "today_up": 0,
                         "apps": {},
                         "history": history,
-                        "status": data.get("status", "ok")
+                        "status": data.get("status", "ok"),
+                        "current_up_bps": 0,
+                        "current_down_bps": 0,
+                        "current_rates": {}
                     }
                 else:
                     if "history" not in data:
@@ -92,7 +74,10 @@ def load_state():
         "today_up": 0,
         "apps": {},
         "history": {},
-        "status": "ok"
+        "status": "ok",
+        "current_up_bps": 0,
+        "current_down_bps": 0,
+        "current_rates": {}
     }
 
 def save_state(state):
@@ -170,13 +155,26 @@ def run_daemon():
             time.sleep(5)
             continue
 
-        last_write = time.time()
-        has_new_data = False
+        current_tick_rates = {}
 
         for line in proc.stdout:
+            line_str = line.strip()
+            if line_str.startswith("Refreshing:"):
+                # End of a 1-second sample tick
+                up_bps = sum(r.get("up", 0) for r in current_tick_rates.values())
+                down_bps = sum(r.get("down", 0) for r in current_tick_rates.values())
+
+                state["current_up_bps"] = up_bps
+                state["current_down_bps"] = down_bps
+                state["current_rates"] = current_tick_rates
+                state["last_tick_time"] = time.time()
+
+                save_state(state)
+                current_tick_rates = {}
+                continue
+
             current_today = get_today_str()
             if state.get("date") != current_today:
-                # Archive yesterday into history
                 prev_date = state.get("date", current_today)
                 prev_down = state.get("today_down", 0)
                 prev_up = state.get("today_up", 0)
@@ -194,11 +192,13 @@ def run_daemon():
                     "today_up": 0,
                     "apps": {},
                     "history": history,
-                    "status": "ok"
+                    "status": "ok",
+                    "current_up_bps": 0,
+                    "current_down_bps": 0,
+                    "current_rates": {}
                 }
-                has_new_data = True
 
-            match = LINE_REGEX.match(line.strip())
+            match = LINE_REGEX.match(line_str)
             if match:
                 app_name = match.group(1)
                 up_bytes = int(match.group(2))
@@ -210,13 +210,11 @@ def run_daemon():
                     app_record = state["apps"].setdefault(app_name, {"down": 0, "up": 0})
                     app_record["down"] += down_bytes
                     app_record["up"] += up_bytes
-                    has_new_data = True
 
-            now = time.time()
-            if has_new_data and (now - last_write >= 1.0):
-                save_state(state)
-                last_write = now
-                has_new_data = False
+                    current_tick_rates[app_name] = {
+                        "up": up_bytes,
+                        "down": down_bytes
+                    }
 
         stderr_output = proc.stderr.read() if proc.stderr else ""
         if "Insufficient permissions" in stderr_output:
@@ -238,11 +236,35 @@ def run_status():
         status_val = "error"
         error_val = err_msg
         error_type_val = err_type
+
     today_down = state.get("today_down", 0)
     today_up = state.get("today_up", 0)
     today_date = state.get("date", get_today_str())
 
-    # Build apps list
+    # Check if current_rates is fresh (within last 3.5 seconds)
+    last_tick = state.get("last_tick_time", 0)
+    is_fresh = (time.time() - last_tick) <= 3.5
+
+    current_up_bps = state.get("current_up_bps", 0) if is_fresh else 0
+    current_down_bps = state.get("current_down_bps", 0) if is_fresh else 0
+    rates_dict = state.get("current_rates", {}) if is_fresh else {}
+
+    # Build active current apps list with speed in Bps
+    current_apps = []
+    for name, r in rates_dict.items():
+        u = r.get("up", 0)
+        d = r.get("down", 0)
+        tot = u + d
+        if tot > 0:
+            current_apps.append({
+                "name": name,
+                "up_bps": u,
+                "down_bps": d,
+                "total_bps": tot
+            })
+    current_apps.sort(key=lambda x: x["total_bps"], reverse=True)
+
+    # Build cumulative apps list
     apps_raw = state.get("apps", {})
     all_apps = []
     for name, stats in apps_raw.items():
@@ -255,21 +277,17 @@ def run_status():
             "total": d + u
         })
 
-    # Sort all_apps by total descending (for the "Current" tab)
-    all_apps.sort(key=lambda x: x["total"], reverse=True)
-
-    # Top downloads (sorted down descending, only apps with down > 0)
+    # Top downloads (sorted down descending)
     top_downloads = [a for a in all_apps if a["down"] > 0]
     top_downloads.sort(key=lambda x: x["down"], reverse=True)
 
-    # Top uploads (sorted up descending, only apps with up > 0)
+    # Top uploads (sorted up descending)
     top_uploads = [a for a in all_apps if a["up"] > 0]
     top_uploads.sort(key=lambda x: x["up"], reverse=True)
 
     # Daily history
     history = state.get("history", {})
     days = []
-    # Add today
     days.append({
         "date": today_date,
         "down": today_down,
@@ -277,7 +295,6 @@ def run_status():
         "total": today_down + today_up,
         "is_today": True
     })
-    # Add historical days sorted descending
     for d_str in sorted(history.keys(), reverse=True):
         if d_str == today_date:
             continue
@@ -297,12 +314,15 @@ def run_status():
         "today_down": today_down,
         "today_up": today_up,
         "total": today_down + today_up,
+        "current_down_bps": current_down_bps,
+        "current_up_bps": current_up_bps,
+        "current_total_bps": current_down_bps + current_up_bps,
         "status": status_val,
         "error": error_val,
         "error_type": error_type_val,
-        "current_apps": all_apps[:25],
-        "top_downloads": top_downloads[:10],
-        "top_uploads": top_uploads[:10],
+        "current_apps": current_apps,
+        "top_downloads": top_downloads[:8],
+        "top_uploads": top_uploads[:8],
         "days": days[:14]
     }
     print(json.dumps(result))

@@ -23,6 +23,10 @@ Panel {
   property double todayDown: 0
   property double todayUp: 0
   property double todayTotal: 0
+  property double currentDownBps: 0
+  property double currentUpBps: 0
+  property double currentTotalBps: 0
+
   property string status: "ok"
   property string errorMessage: ""
   property string errorType: ""
@@ -55,7 +59,7 @@ Panel {
     command: ["python3", root.pluginDir + "/bin/collector.py", "daemon"]
   }
 
-  // Poller
+  // Poller (refresh every 1.5 seconds for live speeds)
   Process {
     id: statusProc
     running: false
@@ -70,6 +74,9 @@ Panel {
           root.todayDown = Number(d.today_down) || 0;
           root.todayUp = Number(d.today_up) || 0;
           root.todayTotal = Number(d.total) || (root.todayDown + root.todayUp);
+          root.currentDownBps = Number(d.current_down_bps) || 0;
+          root.currentUpBps = Number(d.current_up_bps) || 0;
+          root.currentTotalBps = Number(d.current_total_bps) || (root.currentDownBps + root.currentUpBps);
           root.status = d.status || "ok";
           root.errorMessage = d.error || "";
           root.errorType = d.error_type || (root.errorMessage.indexOf("not installed") !== -1 ? "not_installed" : "permission");
@@ -83,7 +90,7 @@ Panel {
   }
 
   Timer {
-    interval: 2000
+    interval: 1500
     repeat: true
     running: true
     triggeredOnStart: true
@@ -97,8 +104,8 @@ Panel {
     bar: root.bar
     open: root.opened
     focusTarget: keyCatcher
-    contentWidth: panel.fittedContentWidth(Style.space(410))
-    contentHeight: panel.fittedContentHeight(column.implicitHeight, Style.space(520))
+    contentWidth: panel.fittedContentWidth(Style.space(425))
+    contentHeight: panel.fittedContentHeight(column.implicitHeight + Style.space(24), Style.space(520))
 
     PanelKeyCatcher {
       id: keyCatcher
@@ -108,6 +115,10 @@ Panel {
       Flickable {
         id: flick
         anchors.fill: parent
+        anchors.leftMargin: Style.space(12)
+        anchors.topMargin: Style.space(12)
+        anchors.bottomMargin: Style.space(12)
+        anchors.rightMargin: Style.space(18) // dedicated gutter so scrollbar NEVER overlaps content
         contentWidth: width
         contentHeight: column.implicitHeight
         clip: true
@@ -121,11 +132,11 @@ Panel {
           anchors.top: parent.top
           anchors.right: parent.right
           anchors.bottom: parent.bottom
-          anchors.topMargin: Style.space(8)
-          anchors.bottomMargin: Style.space(8)
+          anchors.topMargin: Style.space(12)
+          anchors.bottomMargin: Style.space(12)
           anchors.rightMargin: Style.space(4)
           policy: flick.contentHeight > flick.height ? ScrollBar.AlwaysOn : ScrollBar.AlwaysOff
-          active: flick.moving || flick.fllicking || vbar.hovered
+          active: flick.moving || flick.flicking || vbar.hovered
           interactive: true
 
           contentItem: Rectangle {
@@ -139,15 +150,11 @@ Panel {
           id: column
           width: flick.width
           spacing: Style.space(10)
-          topPadding: Style.space(12)
-          bottomPadding: Style.space(12)
-          leftPadding: Style.space(12)
-          rightPadding: Style.space(12)
 
-          // ---------- Header ----------
-          Row {
+          // ---------- Header Row ----------
+          Item {
             width: parent.width
-            height: Style.space(38)
+            implicitHeight: Math.max(titleArea.implicitHeight, totalBadge.implicitHeight)
 
             Row {
               id: titleArea
@@ -188,6 +195,7 @@ Panel {
 
             // Right header badge: Total
             BorderSurface {
+              id: totalBadge
               anchors.right: parent.right
               anchors.verticalCenter: parent.verticalCenter
               implicitWidth: totalBadgeText.implicitWidth + Style.space(16)
@@ -209,53 +217,15 @@ Panel {
             }
           }
 
-          // ---------- Traffic Readout (Upload first on left, then Download, then Total) ----------
+          // ---------- Cumulative Traffic (Download first, Upload second, then Total) ----------
           Row {
-            spacing: Style.space(12)
+            spacing: Style.space(10)
             anchors.left: parent.left
-            anchors.leftMargin: Style.space(4)
-
-            // Upload
-            Row {
-              spacing: Style.space(5)
-              anchors.verticalCenter: parent.verticalCenter
-
-              Text {
-                textFormat: Text.PlainText
-                text: "↑"
-                color: root.upAccent
-                font.family: root.fontFamily
-                font.pixelSize: Style.font.body
-                font.bold: true
-                anchors.verticalCenter: parent.verticalCenter
-              }
-
-              Text {
-                textFormat: Text.PlainText
-                text: Model.formatBytes(root.todayUp)
-                color: root.upAccent
-                font.family: root.fontFamily
-                font.pixelSize: Style.font.body
-                font.bold: true
-                anchors.verticalCenter: parent.verticalCenter
-              }
-            }
-
-            // Separator dot
-            Text {
-              textFormat: Text.PlainText
-              text: "·"
-              color: root.dimFg
-              font.family: root.fontFamily
-              font.pixelSize: Style.font.body
-              anchors.verticalCenter: parent.verticalCenter
-            }
 
             // Download
             Row {
-              spacing: Style.space(5)
+              spacing: Style.space(4)
               anchors.verticalCenter: parent.verticalCenter
-
               Text {
                 textFormat: Text.PlainText
                 text: "↓"
@@ -265,7 +235,6 @@ Panel {
                 font.bold: true
                 anchors.verticalCenter: parent.verticalCenter
               }
-
               Text {
                 textFormat: Text.PlainText
                 text: Model.formatBytes(root.todayDown)
@@ -277,7 +246,39 @@ Panel {
               }
             }
 
-            // Separator dot
+            Text {
+              textFormat: Text.PlainText
+              text: "·"
+              color: root.dimFg
+              font.family: root.fontFamily
+              font.pixelSize: Style.font.body
+              anchors.verticalCenter: parent.verticalCenter
+            }
+
+            // Upload
+            Row {
+              spacing: Style.space(4)
+              anchors.verticalCenter: parent.verticalCenter
+              Text {
+                textFormat: Text.PlainText
+                text: "↑"
+                color: root.upAccent
+                font.family: root.fontFamily
+                font.pixelSize: Style.font.body
+                font.bold: true
+                anchors.verticalCenter: parent.verticalCenter
+              }
+              Text {
+                textFormat: Text.PlainText
+                text: Model.formatBytes(root.todayUp)
+                color: root.upAccent
+                font.family: root.fontFamily
+                font.pixelSize: Style.font.body
+                font.bold: true
+                anchors.verticalCenter: parent.verticalCenter
+              }
+            }
+
             Text {
               textFormat: Text.PlainText
               text: "·"
@@ -289,9 +290,8 @@ Panel {
 
             // Total
             Row {
-              spacing: Style.space(5)
+              spacing: Style.space(4)
               anchors.verticalCenter: parent.verticalCenter
-
               Text {
                 textFormat: Text.PlainText
                 text: "Total:"
@@ -301,13 +301,85 @@ Panel {
                 font.bold: true
                 anchors.verticalCenter: parent.verticalCenter
               }
-
               Text {
                 textFormat: Text.PlainText
                 text: Model.formatBytes(root.todayTotal)
                 color: root.fg
                 font.family: root.fontFamily
                 font.pixelSize: Style.font.body
+                font.bold: true
+                anchors.verticalCenter: parent.verticalCenter
+              }
+            }
+          }
+
+          // ---------- Current Speed (Download speed first, Upload speed second) ----------
+          Row {
+            spacing: Style.space(10)
+            anchors.left: parent.left
+
+            Text {
+              textFormat: Text.PlainText
+              text: "Current:"
+              color: root.dimFg
+              font.family: root.fontFamily
+              font.pixelSize: Style.font.caption
+              font.bold: true
+              anchors.verticalCenter: parent.verticalCenter
+            }
+
+            // Download speed
+            Row {
+              spacing: Style.space(4)
+              anchors.verticalCenter: parent.verticalCenter
+              Text {
+                textFormat: Text.PlainText
+                text: "↓"
+                color: root.downAccent
+                font.family: root.fontFamily
+                font.pixelSize: Style.font.caption
+                font.bold: true
+                anchors.verticalCenter: parent.verticalCenter
+              }
+              Text {
+                textFormat: Text.PlainText
+                text: Model.formatSpeed(root.currentDownBps)
+                color: root.downAccent
+                font.family: root.fontFamily
+                font.pixelSize: Style.font.caption
+                font.bold: true
+                anchors.verticalCenter: parent.verticalCenter
+              }
+            }
+
+            Text {
+              textFormat: Text.PlainText
+              text: "·"
+              color: root.dimFg
+              font.family: root.fontFamily
+              font.pixelSize: Style.font.caption
+              anchors.verticalCenter: parent.verticalCenter
+            }
+
+            // Upload speed
+            Row {
+              spacing: Style.space(4)
+              anchors.verticalCenter: parent.verticalCenter
+              Text {
+                textFormat: Text.PlainText
+                text: "↑"
+                color: root.upAccent
+                font.family: root.fontFamily
+                font.pixelSize: Style.font.caption
+                font.bold: true
+                anchors.verticalCenter: parent.verticalCenter
+              }
+              Text {
+                textFormat: Text.PlainText
+                text: Model.formatSpeed(root.currentUpBps)
+                color: root.upAccent
+                font.family: root.fontFamily
+                font.pixelSize: Style.font.caption
                 font.bold: true
                 anchors.verticalCenter: parent.verticalCenter
               }
@@ -387,28 +459,38 @@ Panel {
           }
 
           // ==========================================
-          // SEGMENTED TABS: Usage | Current | History
+          // TEXT TABS: Usage | Current | History
+          // (Clean text with underline active indicator)
           // ==========================================
           Row {
             width: parent.width
-            spacing: Style.space(8)
+            spacing: Style.space(24)
 
             // Tab 0: Usage
-            BorderSurface {
-              width: (parent.width - Style.space(16)) / 3
-              implicitHeight: Style.space(34)
-              radius: Style.cornerRadius
-              color: root.currentTab === 0 ? Qt.rgba(0.22, 0.74, 0.97, 0.18) : Qt.rgba(1, 1, 1, 0.04)
-              borderSpec: Border.flat(root.currentTab === 0 ? root.downAccent : Qt.rgba(1, 1, 1, 0.08), Math.max(1, Style.space(1)))
+            Item {
+              width: usageTabTxt.implicitWidth
+              height: Style.space(28)
 
               Text {
+                id: usageTabTxt
                 textFormat: Text.PlainText
-                anchors.centerIn: parent
                 text: "Usage"
-                color: root.currentTab === 0 ? root.downAccent : root.dimFg
+                color: root.currentTab === 0 ? root.fg : root.dimFg
                 font.family: root.fontFamily
-                font.pixelSize: Style.font.caption
+                font.pixelSize: Style.font.body
                 font.bold: root.currentTab === 0
+                anchors.top: parent.top
+                anchors.horizontalCenter: parent.horizontalCenter
+              }
+
+              Rectangle {
+                visible: root.currentTab === 0
+                anchors.bottom: parent.bottom
+                anchors.left: parent.left
+                anchors.right: parent.right
+                height: 2
+                radius: 1
+                color: root.downAccent
               }
 
               MouseArea {
@@ -419,21 +501,30 @@ Panel {
             }
 
             // Tab 1: Current
-            BorderSurface {
-              width: (parent.width - Style.space(16)) / 3
-              implicitHeight: Style.space(34)
-              radius: Style.cornerRadius
-              color: root.currentTab === 1 ? Qt.rgba(0.75, 0.52, 0.99, 0.18) : Qt.rgba(1, 1, 1, 0.04)
-              borderSpec: Border.flat(root.currentTab === 1 ? root.upAccent : Qt.rgba(1, 1, 1, 0.08), Math.max(1, Style.space(1)))
+            Item {
+              width: currTabTxt.implicitWidth
+              height: Style.space(28)
 
               Text {
+                id: currTabTxt
                 textFormat: Text.PlainText
-                anchors.centerIn: parent
                 text: "Current"
-                color: root.currentTab === 1 ? root.upAccent : root.dimFg
+                color: root.currentTab === 1 ? root.fg : root.dimFg
                 font.family: root.fontFamily
-                font.pixelSize: Style.font.caption
+                font.pixelSize: Style.font.body
                 font.bold: root.currentTab === 1
+                anchors.top: parent.top
+                anchors.horizontalCenter: parent.horizontalCenter
+              }
+
+              Rectangle {
+                visible: root.currentTab === 1
+                anchors.bottom: parent.bottom
+                anchors.left: parent.left
+                anchors.right: parent.right
+                height: 2
+                radius: 1
+                color: root.upAccent
               }
 
               MouseArea {
@@ -444,21 +535,30 @@ Panel {
             }
 
             // Tab 2: History
-            BorderSurface {
-              width: (parent.width - Style.space(16)) / 3
-              implicitHeight: Style.space(34)
-              radius: Style.cornerRadius
-              color: root.currentTab === 2 ? Qt.rgba(1, 1, 1, 0.16) : Qt.rgba(1, 1, 1, 0.04)
-              borderSpec: Border.flat(root.currentTab === 2 ? root.fg : Qt.rgba(1, 1, 1, 0.08), Math.max(1, Style.space(1)))
+            Item {
+              width: histTabTxt.implicitWidth
+              height: Style.space(28)
 
               Text {
+                id: histTabTxt
                 textFormat: Text.PlainText
-                anchors.centerIn: parent
                 text: "History"
                 color: root.currentTab === 2 ? root.fg : root.dimFg
                 font.family: root.fontFamily
-                font.pixelSize: Style.font.caption
+                font.pixelSize: Style.font.body
                 font.bold: root.currentTab === 2
+                anchors.top: parent.top
+                anchors.horizontalCenter: parent.horizontalCenter
+              }
+
+              Rectangle {
+                visible: root.currentTab === 2
+                anchors.bottom: parent.bottom
+                anchors.left: parent.left
+                anchors.right: parent.right
+                height: 2
+                radius: 1
+                color: root.fg
               }
 
               MouseArea {
@@ -473,205 +573,14 @@ Panel {
 
           // ==========================================
           // TAB 0: USAGE CONTENT
-          // (Left side: Upload, Right side: Download)
+          // (Download first, Upload second)
           // ==========================================
           Column {
             visible: root.currentTab === 0
             width: parent.width
             spacing: Style.space(10)
 
-            // Two summary cards: Upload on left, Download on right
-            Row {
-              width: parent.width
-              spacing: Style.space(10)
-
-              // Upload Card (Left)
-              BorderSurface {
-                width: (parent.width - Style.space(10)) / 2
-                implicitHeight: Style.space(64)
-                color: Qt.rgba(1, 1, 1, 0.03)
-                radius: Style.cornerRadius
-                borderSpec: Border.flat(Qt.rgba(1, 1, 1, 0.08), Math.max(1, Style.space(1)))
-
-                Column {
-                  anchors.centerIn: parent
-                  spacing: Style.space(2)
-
-                  Row {
-                    anchors.horizontalCenter: parent.horizontalCenter
-                    spacing: Style.space(4)
-                    Text {
-                      textFormat: Text.PlainText
-                      text: "↑ Upload"
-                      color: root.upAccent
-                      font.family: root.fontFamily
-                      font.pixelSize: Style.font.caption
-                      font.bold: true
-                    }
-                  }
-
-                  Text {
-                    textFormat: Text.PlainText
-                    anchors.horizontalCenter: parent.horizontalCenter
-                    text: Model.formatBytes(root.todayUp)
-                    color: root.fg
-                    font.family: root.fontFamily
-                    font.pixelSize: Style.font.title
-                    font.bold: true
-                  }
-
-                  Text {
-                    textFormat: Text.PlainText
-                    anchors.horizontalCenter: parent.horizontalCenter
-                    text: Math.round(root.todayUp / (root.todayTotal || 1) * 100) + "% of total"
-                    color: root.dimFg
-                    font.family: root.fontFamily
-                    font.pixelSize: Style.font.caption
-                  }
-                }
-              }
-
-              // Download Card (Right)
-              BorderSurface {
-                width: (parent.width - Style.space(10)) / 2
-                implicitHeight: Style.space(64)
-                color: Qt.rgba(1, 1, 1, 0.03)
-                radius: Style.cornerRadius
-                borderSpec: Border.flat(Qt.rgba(1, 1, 1, 0.08), Math.max(1, Style.space(1)))
-
-                Column {
-                  anchors.centerIn: parent
-                  spacing: Style.space(2)
-
-                  Row {
-                    anchors.horizontalCenter: parent.horizontalCenter
-                    spacing: Style.space(4)
-                    Text {
-                      textFormat: Text.PlainText
-                      text: "↓ Download"
-                      color: root.downAccent
-                      font.family: root.fontFamily
-                      font.pixelSize: Style.font.caption
-                      font.bold: true
-                    }
-                  }
-
-                  Text {
-                    textFormat: Text.PlainText
-                    anchors.horizontalCenter: parent.horizontalCenter
-                    text: Model.formatBytes(root.todayDown)
-                    color: root.fg
-                    font.family: root.fontFamily
-                    font.pixelSize: Style.font.title
-                    font.bold: true
-                  }
-
-                  Text {
-                    textFormat: Text.PlainText
-                    anchors.horizontalCenter: parent.horizontalCenter
-                    text: Math.round(root.todayDown / (root.todayTotal || 1) * 100) + "% of total"
-                    color: root.dimFg
-                    font.family: root.fontFamily
-                    font.pixelSize: Style.font.caption
-                  }
-                }
-              }
-            }
-
-            // Ratio Proportion Bar
-            Item {
-              width: parent.width
-              height: Style.space(6)
-
-              Rectangle {
-                anchors.fill: parent
-                radius: Style.cornerRadius
-                color: Qt.rgba(1, 1, 1, 0.06)
-                clip: true
-
-                Row {
-                  anchors.fill: parent
-
-                  Rectangle {
-                    width: parent.width * Math.min(1.0, root.todayUp / (root.todayTotal || 1))
-                    height: parent.height
-                    color: root.upAccent
-                  }
-
-                  Rectangle {
-                    width: Math.max(0, parent.width - (parent.width * Math.min(1.0, root.todayUp / (root.todayTotal || 1))))
-                    height: parent.height
-                    color: root.downAccent
-                  }
-                }
-              }
-            }
-
-            // Top Uploads Section
-            Column {
-              width: parent.width
-              spacing: Style.space(6)
-
-              Text {
-                textFormat: Text.PlainText
-                text: "Top Upload Apps"
-                color: root.upAccent
-                font.family: root.fontFamily
-                font.pixelSize: Style.font.caption
-                font.bold: true
-              }
-
-              Repeater {
-                model: (root.topUploads || []).slice(0, 4)
-
-                delegate: BorderSurface {
-                  required property var modelData
-                  width: column.width
-                  implicitHeight: Style.space(34)
-                  color: Qt.rgba(1, 1, 1, 0.03)
-                  radius: Style.cornerRadius
-                  borderSpec: Border.flat(Qt.rgba(1, 1, 1, 0.06), Math.max(1, Style.space(1)))
-
-                  Item {
-                    anchors.left: parent.left
-                    anchors.right: parent.right
-                    anchors.leftMargin: Style.space(10)
-                    anchors.rightMargin: Style.space(10)
-                    anchors.verticalCenter: parent.verticalCenter
-                    height: nameText.implicitHeight
-
-                    Text {
-                      id: nameText
-                      textFormat: Text.PlainText
-                      anchors.left: parent.left
-                      anchors.right: valText.left
-                      anchors.rightMargin: Style.space(8)
-                      anchors.verticalCenter: parent.verticalCenter
-                      text: modelData.name
-                      color: root.fg
-                      font.family: root.fontFamily
-                      font.pixelSize: Style.font.body
-                      font.bold: true
-                      elide: Text.ElideRight
-                    }
-
-                    Text {
-                      id: valText
-                      textFormat: Text.PlainText
-                      anchors.right: parent.right
-                      anchors.verticalCenter: parent.verticalCenter
-                      text: Model.formatBytes(modelData.up)
-                      color: root.upAccent
-                      font.family: root.fontFamily
-                      font.pixelSize: Style.font.body
-                      font.bold: true
-                    }
-                  }
-                }
-              }
-            }
-
-            // Top Downloads Section
+            // Top Downloads Section (Download First!)
             Column {
               width: parent.width
               spacing: Style.space(6)
@@ -686,7 +595,7 @@ Panel {
               }
 
               Repeater {
-                model: (root.topDownloads || []).slice(0, 4)
+                model: root.topDownloads
 
                 delegate: BorderSurface {
                   required property var modelData
@@ -734,10 +643,74 @@ Panel {
                 }
               }
             }
+
+            // Top Uploads Section (Upload Second!)
+            Column {
+              width: parent.width
+              spacing: Style.space(6)
+
+              Text {
+                textFormat: Text.PlainText
+                text: "Top Upload Apps"
+                color: root.upAccent
+                font.family: root.fontFamily
+                font.pixelSize: Style.font.caption
+                font.bold: true
+              }
+
+              Repeater {
+                model: root.topUploads
+
+                delegate: BorderSurface {
+                  required property var modelData
+                  width: column.width
+                  implicitHeight: Style.space(34)
+                  color: Qt.rgba(1, 1, 1, 0.03)
+                  radius: Style.cornerRadius
+                  borderSpec: Border.flat(Qt.rgba(1, 1, 1, 0.06), Math.max(1, Style.space(1)))
+
+                  Item {
+                    anchors.left: parent.left
+                    anchors.right: parent.right
+                    anchors.leftMargin: Style.space(10)
+                    anchors.rightMargin: Style.space(10)
+                    anchors.verticalCenter: parent.verticalCenter
+                    height: nameText.implicitHeight
+
+                    Text {
+                      id: nameText
+                      textFormat: Text.PlainText
+                      anchors.left: parent.left
+                      anchors.right: valText.left
+                      anchors.rightMargin: Style.space(8)
+                      anchors.verticalCenter: parent.verticalCenter
+                      text: modelData.name
+                      color: root.fg
+                      font.family: root.fontFamily
+                      font.pixelSize: Style.font.body
+                      font.bold: true
+                      elide: Text.ElideRight
+                    }
+
+                    Text {
+                      id: valText
+                      textFormat: Text.PlainText
+                      anchors.right: parent.right
+                      anchors.verticalCenter: parent.verticalCenter
+                      text: Model.formatBytes(modelData.up)
+                      color: root.upAccent
+                      font.family: root.fontFamily
+                      font.pixelSize: Style.font.body
+                      font.bold: true
+                    }
+                  }
+                }
+              }
+            }
           }
 
           // ==========================================
-          // TAB 1: CURRENT APPS USAGE
+          // TAB 1: CURRENT LIVE APP SPEEDS (MB/s or KB/s)
           // ==========================================
           Column {
             visible: root.currentTab === 1
@@ -749,7 +722,7 @@ Panel {
 
               Text {
                 textFormat: Text.PlainText
-                text: "Current App Usage"
+                text: "Current App Speeds"
                 color: root.fg
                 font.family: root.fontFamily
                 font.pixelSize: Style.font.body
@@ -775,7 +748,7 @@ Panel {
                   id: currBadgeText
                   textFormat: Text.PlainText
                   anchors.centerIn: parent
-                  text: root.currentApps.length + " apps"
+                  text: root.currentApps.length + " active"
                   color: root.upAccent
                   font.family: root.fontFamily
                   font.pixelSize: Style.font.caption
@@ -788,7 +761,7 @@ Panel {
               visible: !root.currentApps || root.currentApps.length === 0
               textFormat: Text.PlainText
               width: parent.width
-              text: "No network activity recorded yet today."
+              text: "No active network transfers at the moment."
               color: root.dimFg
               font.family: root.fontFamily
               font.pixelSize: Style.font.caption
@@ -817,7 +790,7 @@ Panel {
                     id: curName
                     textFormat: Text.PlainText
                     anchors.left: parent.left
-                    anchors.right: curVal.left
+                    anchors.right: curMidDetails.left
                     anchors.rightMargin: Style.space(8)
                     anchors.verticalCenter: parent.verticalCenter
                     text: modelData.name
@@ -828,13 +801,38 @@ Panel {
                     elide: Text.ElideRight
                   }
 
+                  // Mid detail: Download speed first, upload speed second
+                  Row {
+                    id: curMidDetails
+                    anchors.right: curVal.left
+                    anchors.rightMargin: Style.space(12)
+                    anchors.verticalCenter: parent.verticalCenter
+                    spacing: Style.space(6)
+
+                    Text {
+                      textFormat: Text.PlainText
+                      text: "↓ " + Model.formatSpeed(modelData.down_bps)
+                      color: root.downAccent
+                      font.family: root.fontFamily
+                      font.pixelSize: Style.font.caption
+                    }
+
+                    Text {
+                      textFormat: Text.PlainText
+                      text: "↑ " + Model.formatSpeed(modelData.up_bps)
+                      color: root.upAccent
+                      font.family: root.fontFamily
+                      font.pixelSize: Style.font.caption
+                    }
+                  }
+
                   Text {
                     id: curVal
                     textFormat: Text.PlainText
                     anchors.right: parent.right
                     anchors.verticalCenter: parent.verticalCenter
-                    text: Model.formatBytes(modelData.total)
-                    color: root.downAccent
+                    text: Model.formatSpeed(modelData.total_bps)
+                    color: root.fg
                     font.family: root.fontFamily
                     font.pixelSize: Style.font.body
                     font.bold: true
@@ -936,7 +934,7 @@ Panel {
                     elide: Text.ElideRight
                   }
 
-                  // Mid detail: Upload first, then download
+                  // Mid detail: Download first, then upload
                   Row {
                     id: dayMidDetails
                     anchors.right: dayValText.left
@@ -946,16 +944,16 @@ Panel {
 
                     Text {
                       textFormat: Text.PlainText
-                      text: "↑ " + Model.formatBytes(modelData.up)
-                      color: root.upAccent
+                      text: "↓ " + Model.formatBytes(modelData.down)
+                      color: root.downAccent
                       font.family: root.fontFamily
                       font.pixelSize: Style.font.caption
                     }
 
                     Text {
                       textFormat: Text.PlainText
-                      text: "↓ " + Model.formatBytes(modelData.down)
-                      color: root.downAccent
+                      text: "↑ " + Model.formatBytes(modelData.up)
+                      color: root.upAccent
                       font.family: root.fontFamily
                       font.pixelSize: Style.font.caption
                     }
