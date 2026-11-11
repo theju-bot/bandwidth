@@ -1,0 +1,29 @@
+{
+  "schemaVersion": 1,
+  "id": "theju-bot.bandwidth",
+  "name": "Bandwidth",
+  "version": "1.0.0",
+  "author": "Thesigan Yogarasa",
+  "license": "MIT",
+  "description": "Daily internet bandwidth monitor powered by bandwhich: live usage in the bar, per-app breakdown, and history.",
+  "kinds": [
+    "bar-widget"
+  ],
+  "entryPoints": {
+    "barWidget": "BarWidget.qml"
+  },
+  "barWidget": {
+    "displayName": "Bandwidth",
+    "description": "Daily internet bandwidth monitor with per-app breakdown, downloads/uploads tabs, and 30-day history.",
+    "category": "Network",
+    "aliases": [
+      "bandwidth",
+      "network",
+      "internet",
+      "bandwhich",
+      "data"
+    ],
+    "allowMultiple": false,
+    "defaultSection": "right"
+  }
+}
