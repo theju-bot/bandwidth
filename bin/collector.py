@@ -320,6 +320,7 @@ def run_status():
         "status": status_val,
         "error": error_val,
         "error_type": error_type_val,
+        "overview_apps": all_apps[:20],
         "current_apps": current_apps,
         "top_downloads": top_downloads[:8],
         "top_uploads": top_uploads[:8],

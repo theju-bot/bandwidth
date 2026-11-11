@@ -30,12 +30,11 @@ Panel {
   property string status: "ok"
   property string errorMessage: ""
   property string errorType: ""
+  property var overviewApps: []
   property var currentApps: []
-  property var topDownloads: []
-  property var topUploads: []
   property var daysHistory: []
 
-  // Active tab: 0 = Usage, 1 = Current, 2 = History
+  // Active tab: 0 = Overview, 1 = Live Activity, 2 = Usage History
   property int currentTab: 0
 
   readonly property string fontFamily: Style.font.family
@@ -80,9 +79,8 @@ Panel {
           root.status = d.status || "ok";
           root.errorMessage = d.error || "";
           root.errorType = d.error_type || (root.errorMessage.indexOf("not installed") !== -1 ? "not_installed" : "permission");
+          root.overviewApps = d.overview_apps || [];
           root.currentApps = d.current_apps || [];
-          root.topDownloads = d.top_downloads || [];
-          root.topUploads = d.top_uploads || [];
           root.daysHistory = d.days || [];
         } catch (e) {}
       }
@@ -104,7 +102,7 @@ Panel {
     bar: root.bar
     open: root.opened
     focusTarget: keyCatcher
-    contentWidth: panel.fittedContentWidth(Style.space(390))
+    contentWidth: panel.fittedContentWidth(Style.space(410))
     contentHeight: panel.fittedContentHeight(column.implicitHeight, Style.space(520))
 
     PanelKeyCatcher {
@@ -131,7 +129,7 @@ Panel {
           width: flick.width
           spacing: Style.space(10)
 
-          // ---------- Header Row (Clean, no redundant total badge) ----------
+          // ---------- Header Row ----------
           Row {
             id: titleArea
             width: parent.width
@@ -168,43 +166,10 @@ Panel {
             }
           }
 
-          // ---------- Cumulative Traffic (Download first, Upload second, then Total) ----------
+          // ---------- Cumulative Traffic (Upload on left, Download on right, then Total) ----------
           Row {
             spacing: Style.space(10)
             anchors.left: parent.left
-
-            // Download
-            Row {
-              spacing: Style.space(4)
-              anchors.verticalCenter: parent.verticalCenter
-              Text {
-                textFormat: Text.PlainText
-                text: "↓"
-                color: root.downAccent
-                font.family: root.fontFamily
-                font.pixelSize: Style.font.body
-                font.bold: true
-                anchors.verticalCenter: parent.verticalCenter
-              }
-              Text {
-                textFormat: Text.PlainText
-                text: Model.formatBytes(root.todayDown)
-                color: root.downAccent
-                font.family: root.fontFamily
-                font.pixelSize: Style.font.body
-                font.bold: true
-                anchors.verticalCenter: parent.verticalCenter
-              }
-            }
-
-            Text {
-              textFormat: Text.PlainText
-              text: "·"
-              color: root.dimFg
-              font.family: root.fontFamily
-              font.pixelSize: Style.font.body
-              anchors.verticalCenter: parent.verticalCenter
-            }
 
             // Upload
             Row {
@@ -223,6 +188,39 @@ Panel {
                 textFormat: Text.PlainText
                 text: Model.formatBytes(root.todayUp)
                 color: root.upAccent
+                font.family: root.fontFamily
+                font.pixelSize: Style.font.body
+                font.bold: true
+                anchors.verticalCenter: parent.verticalCenter
+              }
+            }
+
+            Text {
+              textFormat: Text.PlainText
+              text: "·"
+              color: root.dimFg
+              font.family: root.fontFamily
+              font.pixelSize: Style.font.body
+              anchors.verticalCenter: parent.verticalCenter
+            }
+
+            // Download
+            Row {
+              spacing: Style.space(4)
+              anchors.verticalCenter: parent.verticalCenter
+              Text {
+                textFormat: Text.PlainText
+                text: "↓"
+                color: root.downAccent
+                font.family: root.fontFamily
+                font.pixelSize: Style.font.body
+                font.bold: true
+                anchors.verticalCenter: parent.verticalCenter
+              }
+              Text {
+                textFormat: Text.PlainText
+                text: Model.formatBytes(root.todayDown)
+                color: root.downAccent
                 font.family: root.fontFamily
                 font.pixelSize: Style.font.body
                 font.bold: true
@@ -264,7 +262,7 @@ Panel {
             }
           }
 
-          // ---------- Current Speed (Download speed first, Upload speed second) ----------
+          // ---------- Current Speed (Upload speed on left, Download speed on right) ----------
           Row {
             spacing: Style.space(10)
             anchors.left: parent.left
@@ -276,39 +274,6 @@ Panel {
               font.family: root.fontFamily
               font.pixelSize: Style.font.caption
               font.bold: true
-              anchors.verticalCenter: parent.verticalCenter
-            }
-
-            // Download speed
-            Row {
-              spacing: Style.space(4)
-              anchors.verticalCenter: parent.verticalCenter
-              Text {
-                textFormat: Text.PlainText
-                text: "↓"
-                color: root.downAccent
-                font.family: root.fontFamily
-                font.pixelSize: Style.font.caption
-                font.bold: true
-                anchors.verticalCenter: parent.verticalCenter
-              }
-              Text {
-                textFormat: Text.PlainText
-                text: Model.formatSpeed(root.currentDownBps)
-                color: root.downAccent
-                font.family: root.fontFamily
-                font.pixelSize: Style.font.caption
-                font.bold: true
-                anchors.verticalCenter: parent.verticalCenter
-              }
-            }
-
-            Text {
-              textFormat: Text.PlainText
-              text: "·"
-              color: root.dimFg
-              font.family: root.fontFamily
-              font.pixelSize: Style.font.caption
               anchors.verticalCenter: parent.verticalCenter
             }
 
@@ -329,6 +294,39 @@ Panel {
                 textFormat: Text.PlainText
                 text: Model.formatSpeed(root.currentUpBps)
                 color: root.upAccent
+                font.family: root.fontFamily
+                font.pixelSize: Style.font.caption
+                font.bold: true
+                anchors.verticalCenter: parent.verticalCenter
+              }
+            }
+
+            Text {
+              textFormat: Text.PlainText
+              text: "·"
+              color: root.dimFg
+              font.family: root.fontFamily
+              font.pixelSize: Style.font.caption
+              anchors.verticalCenter: parent.verticalCenter
+            }
+
+            // Download speed
+            Row {
+              spacing: Style.space(4)
+              anchors.verticalCenter: parent.verticalCenter
+              Text {
+                textFormat: Text.PlainText
+                text: "↓"
+                color: root.downAccent
+                font.family: root.fontFamily
+                font.pixelSize: Style.font.caption
+                font.bold: true
+                anchors.verticalCenter: parent.verticalCenter
+              }
+              Text {
+                textFormat: Text.PlainText
+                text: Model.formatSpeed(root.currentDownBps)
+                color: root.downAccent
                 font.family: root.fontFamily
                 font.pixelSize: Style.font.caption
                 font.bold: true
@@ -410,22 +408,22 @@ Panel {
           }
 
           // ==========================================
-          // TEXT TABS: Usage | Current | History
+          // TEXT TABS: Overview | Live Activity | Usage History
           // (Clean text with underline active indicator)
           // ==========================================
           Row {
             width: parent.width
-            spacing: Style.space(24)
+            spacing: Style.space(20)
 
-            // Tab 0: Usage
+            // Tab 0: Overview
             Item {
-              width: usageTabTxt.implicitWidth
+              width: tab0Txt.implicitWidth
               height: Style.space(28)
 
               Text {
-                id: usageTabTxt
+                id: tab0Txt
                 textFormat: Text.PlainText
-                text: "Usage"
+                text: "Overview"
                 color: root.currentTab === 0 ? root.fg : root.dimFg
                 font.family: root.fontFamily
                 font.pixelSize: Style.font.body
@@ -451,15 +449,15 @@ Panel {
               }
             }
 
-            // Tab 1: Current
+            // Tab 1: Live Activity
             Item {
-              width: currTabTxt.implicitWidth
+              width: tab1Txt.implicitWidth
               height: Style.space(28)
 
               Text {
-                id: currTabTxt
+                id: tab1Txt
                 textFormat: Text.PlainText
-                text: "Current"
+                text: "Live Activity"
                 color: root.currentTab === 1 ? root.fg : root.dimFg
                 font.family: root.fontFamily
                 font.pixelSize: Style.font.body
@@ -485,15 +483,15 @@ Panel {
               }
             }
 
-            // Tab 2: History
+            // Tab 2: Usage History
             Item {
-              width: histTabTxt.implicitWidth
+              width: tab2Txt.implicitWidth
               height: Style.space(28)
 
               Text {
-                id: histTabTxt
+                id: tab2Txt
                 textFormat: Text.PlainText
-                text: "History"
+                text: "Usage History"
                 color: root.currentTab === 2 ? root.fg : root.dimFg
                 font.family: root.fontFamily
                 font.pixelSize: Style.font.body
@@ -523,133 +521,136 @@ Panel {
           PanelSeparator { width: parent.width }
 
           // ==========================================
-          // TAB 0: USAGE CONTENT
-          // (Download first, Upload second)
+          // TAB 0: OVERVIEW CONTENT
+          // (Unified Apps List: Upload on left, Download on far right)
           // ==========================================
           Column {
             visible: root.currentTab === 0
             width: parent.width
-            spacing: Style.space(10)
+            spacing: Style.space(8)
 
-            // Top Downloads Section (Download First!)
-            Column {
+            // Column Headers
+            Item {
               width: parent.width
-              spacing: Style.space(6)
+              implicitHeight: Style.space(18)
 
               Text {
-                textFormat: Text.PlainText
-                text: "Top Download Apps"
-                color: root.downAccent
+                anchors.left: parent.left
+                anchors.leftMargin: Style.space(10)
+                anchors.verticalCenter: parent.verticalCenter
+                text: "Application"
+                color: root.dimFg
                 font.family: root.fontFamily
                 font.pixelSize: Style.font.caption
                 font.bold: true
               }
 
-              Repeater {
-                model: root.topDownloads
-
-                delegate: BorderSurface {
-                  required property var modelData
-                  width: column.width
-                  implicitHeight: Style.space(34)
-                  color: Qt.rgba(1, 1, 1, 0.03)
-                  radius: Style.cornerRadius
-                  borderSpec: Border.flat(Qt.rgba(1, 1, 1, 0.06), Math.max(1, Style.space(1)))
-
-                  Item {
-                    anchors.left: parent.left
-                    anchors.right: parent.right
-                    anchors.leftMargin: Style.space(10)
-                    anchors.rightMargin: Style.space(12)
-                    anchors.verticalCenter: parent.verticalCenter
-                    height: dNameText.implicitHeight
-
-                    Text {
-                      id: dNameText
-                      textFormat: Text.PlainText
-                      anchors.left: parent.left
-                      anchors.right: dValText.left
-                      anchors.rightMargin: Style.space(8)
-                      anchors.verticalCenter: parent.verticalCenter
-                      text: modelData.name
-                      color: root.fg
-                      font.family: root.fontFamily
-                      font.pixelSize: Style.font.body
-                      font.bold: true
-                      elide: Text.ElideRight
-                    }
-
-                    Text {
-                      id: dValText
-                      textFormat: Text.PlainText
-                      anchors.right: parent.right
-                      anchors.verticalCenter: parent.verticalCenter
-                      text: Model.formatBytes(modelData.down)
-                      color: root.downAccent
-                      font.family: root.fontFamily
-                      font.pixelSize: Style.font.body
-                      font.bold: true
-                    }
-                  }
-                }
-              }
-            }
-
-            // Top Uploads Section (Upload Second!)
-            Column {
-              width: parent.width
-              spacing: Style.space(6)
-
               Text {
-                textFormat: Text.PlainText
-                text: "Top Upload Apps"
+                anchors.right: ovDownHeader.left
+                anchors.rightMargin: Style.space(16)
+                anchors.verticalCenter: parent.verticalCenter
+                width: Style.space(85)
+                horizontalAlignment: Text.AlignRight
+                text: "↑ Upload"
                 color: root.upAccent
                 font.family: root.fontFamily
                 font.pixelSize: Style.font.caption
                 font.bold: true
               }
 
-              Repeater {
-                model: root.topUploads
+              Text {
+                id: ovDownHeader
+                anchors.right: parent.right
+                anchors.rightMargin: Style.space(12)
+                anchors.verticalCenter: parent.verticalCenter
+                width: Style.space(85)
+                horizontalAlignment: Text.AlignRight
+                text: "↓ Download"
+                color: root.downAccent
+                font.family: root.fontFamily
+                font.pixelSize: Style.font.caption
+                font.bold: true
+              }
+            }
 
-                delegate: BorderSurface {
-                  required property var modelData
-                  width: column.width
-                  implicitHeight: Style.space(34)
-                  color: Qt.rgba(1, 1, 1, 0.03)
-                  radius: Style.cornerRadius
-                  borderSpec: Border.flat(Qt.rgba(1, 1, 1, 0.06), Math.max(1, Style.space(1)))
+            Text {
+              visible: !root.overviewApps || root.overviewApps.length === 0
+              textFormat: Text.PlainText
+              width: parent.width
+              text: "No network activity recorded yet today."
+              color: root.dimFg
+              font.family: root.fontFamily
+              font.pixelSize: Style.font.caption
+            }
 
-                  Item {
+            Repeater {
+              model: root.overviewApps
+
+              delegate: BorderSurface {
+                required property var modelData
+                width: column.width
+                implicitHeight: Style.space(34)
+                color: Qt.rgba(1, 1, 1, 0.03)
+                radius: Style.cornerRadius
+                borderSpec: Border.flat(Qt.rgba(1, 1, 1, 0.06), Math.max(1, Style.space(1)))
+
+                Item {
+                  anchors.left: parent.left
+                  anchors.right: parent.right
+                  anchors.leftMargin: Style.space(10)
+                  anchors.rightMargin: Style.space(12)
+                  anchors.verticalCenter: parent.verticalCenter
+                  height: ovName.implicitHeight
+
+                  Text {
+                    id: ovName
+                    textFormat: Text.PlainText
                     anchors.left: parent.left
-                    anchors.right: parent.right
-                    anchors.leftMargin: Style.space(10)
+                    anchors.right: ovUpCol.left
                     anchors.rightMargin: Style.space(12)
                     anchors.verticalCenter: parent.verticalCenter
-                    height: nameText.implicitHeight
+                    text: modelData.name
+                    color: root.fg
+                    font.family: root.fontFamily
+                    font.pixelSize: Style.font.body
+                    font.bold: true
+                    elide: Text.ElideRight
+                  }
+
+                  // Upload column (left/middle)
+                  Item {
+                    id: ovUpCol
+                    anchors.right: ovDownCol.left
+                    anchors.rightMargin: Style.space(16)
+                    anchors.verticalCenter: parent.verticalCenter
+                    width: Style.space(85)
+                    height: parent.height
 
                     Text {
-                      id: nameText
-                      textFormat: Text.PlainText
-                      anchors.left: parent.left
-                      anchors.right: valText.left
-                      anchors.rightMargin: Style.space(8)
-                      anchors.verticalCenter: parent.verticalCenter
-                      text: modelData.name
-                      color: root.fg
-                      font.family: root.fontFamily
-                      font.pixelSize: Style.font.body
-                      font.bold: true
-                      elide: Text.ElideRight
-                    }
-
-                    Text {
-                      id: valText
                       textFormat: Text.PlainText
                       anchors.right: parent.right
                       anchors.verticalCenter: parent.verticalCenter
-                      text: Model.formatBytes(modelData.up)
+                      text: "↑ " + Model.formatBytes(modelData.up)
                       color: root.upAccent
+                      font.family: root.fontFamily
+                      font.pixelSize: Style.font.body
+                    }
+                  }
+
+                  // Download column (far right)
+                  Item {
+                    id: ovDownCol
+                    anchors.right: parent.right
+                    anchors.verticalCenter: parent.verticalCenter
+                    width: Style.space(85)
+                    height: parent.height
+
+                    Text {
+                      textFormat: Text.PlainText
+                      anchors.right: parent.right
+                      anchors.verticalCenter: parent.verticalCenter
+                      text: "↓ " + Model.formatBytes(modelData.down)
+                      color: root.downAccent
                       font.family: root.fontFamily
                       font.pixelSize: Style.font.body
                       font.bold: true
@@ -661,50 +662,55 @@ Panel {
           }
 
           // ==========================================
-          // TAB 1: CURRENT LIVE APP SPEEDS (MB/s or KB/s)
+          // TAB 1: LIVE ACTIVITY CONTENT
+          // (Real-time speed: Upload on left, Download on far right, NO Total)
           // ==========================================
           Column {
             visible: root.currentTab === 1
             width: parent.width
             spacing: Style.space(8)
 
-            Row {
+            // Column Headers
+            Item {
               width: parent.width
+              implicitHeight: Style.space(18)
 
               Text {
-                textFormat: Text.PlainText
-                text: "Current App Speeds"
-                color: root.fg
+                anchors.left: parent.left
+                anchors.leftMargin: Style.space(10)
+                anchors.verticalCenter: parent.verticalCenter
+                text: "Application"
+                color: root.dimFg
                 font.family: root.fontFamily
-                font.pixelSize: Style.font.body
+                font.pixelSize: Style.font.caption
                 font.bold: true
-                anchors.verticalCenter: parent.verticalCenter
               }
 
-              Item {
-                width: Math.max(0, parent.width - parent.children[0].width - currBadge.width - Style.space(12))
-                height: 1
+              Text {
+                anchors.right: liveDownHeader.left
+                anchors.rightMargin: Style.space(16)
+                anchors.verticalCenter: parent.verticalCenter
+                width: Style.space(85)
+                horizontalAlignment: Text.AlignRight
+                text: "↑ Upload"
+                color: root.upAccent
+                font.family: root.fontFamily
+                font.pixelSize: Style.font.caption
+                font.bold: true
               }
 
-              BorderSurface {
-                id: currBadge
-                visible: !!root.currentApps && root.currentApps.length > 0
-                implicitWidth: currBadgeText.implicitWidth + Style.space(14)
-                implicitHeight: currBadgeText.implicitHeight + Style.space(4)
-                color: Qt.rgba(0.75, 0.52, 0.99, 0.15)
-                radius: Style.cornerRadius
+              Text {
+                id: liveDownHeader
+                anchors.right: parent.right
+                anchors.rightMargin: Style.space(12)
                 anchors.verticalCenter: parent.verticalCenter
-
-                Text {
-                  id: currBadgeText
-                  textFormat: Text.PlainText
-                  anchors.centerIn: parent
-                  text: root.currentApps.length + " active"
-                  color: root.upAccent
-                  font.family: root.fontFamily
-                  font.pixelSize: Style.font.caption
-                  font.bold: true
-                }
+                width: Style.space(85)
+                horizontalAlignment: Text.AlignRight
+                text: "↓ Download"
+                color: root.downAccent
+                font.family: root.fontFamily
+                font.pixelSize: Style.font.caption
+                font.bold: true
               }
             }
 
@@ -741,8 +747,8 @@ Panel {
                     id: curName
                     textFormat: Text.PlainText
                     anchors.left: parent.left
-                    anchors.right: curMidDetails.left
-                    anchors.rightMargin: Style.space(8)
+                    anchors.right: liveUpCol.left
+                    anchors.rightMargin: Style.space(12)
                     anchors.verticalCenter: parent.verticalCenter
                     text: modelData.name
                     color: root.fg
@@ -752,41 +758,44 @@ Panel {
                     elide: Text.ElideRight
                   }
 
-                  // Mid detail: Download speed first, upload speed second
-                  Row {
-                    id: curMidDetails
-                    anchors.right: curVal.left
-                    anchors.rightMargin: Style.space(12)
+                  // Upload Speed column (left/middle)
+                  Item {
+                    id: liveUpCol
+                    anchors.right: liveDownCol.left
+                    anchors.rightMargin: Style.space(16)
                     anchors.verticalCenter: parent.verticalCenter
-                    spacing: Style.space(6)
+                    width: Style.space(85)
+                    height: parent.height
 
                     Text {
                       textFormat: Text.PlainText
-                      text: "↓ " + Model.formatSpeed(modelData.down_bps)
-                      color: root.downAccent
-                      font.family: root.fontFamily
-                      font.pixelSize: Style.font.caption
-                    }
-
-                    Text {
-                      textFormat: Text.PlainText
+                      anchors.right: parent.right
+                      anchors.verticalCenter: parent.verticalCenter
                       text: "↑ " + Model.formatSpeed(modelData.up_bps)
                       color: root.upAccent
                       font.family: root.fontFamily
-                      font.pixelSize: Style.font.caption
+                      font.pixelSize: Style.font.body
                     }
                   }
 
-                  Text {
-                    id: curVal
-                    textFormat: Text.PlainText
+                  // Download Speed column (far right)
+                  Item {
+                    id: liveDownCol
                     anchors.right: parent.right
                     anchors.verticalCenter: parent.verticalCenter
-                    text: Model.formatSpeed(modelData.total_bps)
-                    color: root.fg
-                    font.family: root.fontFamily
-                    font.pixelSize: Style.font.body
-                    font.bold: true
+                    width: Style.space(85)
+                    height: parent.height
+
+                    Text {
+                      textFormat: Text.PlainText
+                      anchors.right: parent.right
+                      anchors.verticalCenter: parent.verticalCenter
+                      text: "↓ " + Model.formatSpeed(modelData.down_bps)
+                      color: root.downAccent
+                      font.family: root.fontFamily
+                      font.pixelSize: Style.font.body
+                      font.bold: true
+                    }
                   }
                 }
               }
@@ -794,50 +803,55 @@ Panel {
           }
 
           // ==========================================
-          // TAB 2: HISTORY CONTENT
+          // TAB 2: USAGE HISTORY CONTENT
+          // (Upload on left, Download on far right)
           // ==========================================
           Column {
             visible: root.currentTab === 2
             width: parent.width
             spacing: Style.space(8)
 
-            Row {
+            // Column Headers
+            Item {
               width: parent.width
+              implicitHeight: Style.space(18)
 
               Text {
-                textFormat: Text.PlainText
-                text: "Daily History"
-                color: root.fg
+                anchors.left: parent.left
+                anchors.leftMargin: Style.space(10)
+                anchors.verticalCenter: parent.verticalCenter
+                text: "Date"
+                color: root.dimFg
                 font.family: root.fontFamily
-                font.pixelSize: Style.font.body
+                font.pixelSize: Style.font.caption
                 font.bold: true
-                anchors.verticalCenter: parent.verticalCenter
               }
 
-              Item {
-                width: Math.max(0, parent.width - parent.children[0].width - histBadge.width - Style.space(12))
-                height: 1
+              Text {
+                anchors.right: histDownHeader.left
+                anchors.rightMargin: Style.space(16)
+                anchors.verticalCenter: parent.verticalCenter
+                width: Style.space(85)
+                horizontalAlignment: Text.AlignRight
+                text: "↑ Upload"
+                color: root.upAccent
+                font.family: root.fontFamily
+                font.pixelSize: Style.font.caption
+                font.bold: true
               }
 
-              BorderSurface {
-                id: histBadge
-                visible: !!root.daysHistory && root.daysHistory.length > 0
-                implicitWidth: histBadgeText.implicitWidth + Style.space(14)
-                implicitHeight: histBadgeText.implicitHeight + Style.space(4)
-                color: Qt.rgba(1, 1, 1, 0.08)
-                radius: Style.cornerRadius
+              Text {
+                id: histDownHeader
+                anchors.right: parent.right
+                anchors.rightMargin: Style.space(12)
                 anchors.verticalCenter: parent.verticalCenter
-
-                Text {
-                  id: histBadgeText
-                  textFormat: Text.PlainText
-                  anchors.centerIn: parent
-                  text: root.daysHistory.length + " days"
-                  color: root.fg
-                  font.family: root.fontFamily
-                  font.pixelSize: Style.font.caption
-                  font.bold: true
-                }
+                width: Style.space(85)
+                horizontalAlignment: Text.AlignRight
+                text: "↓ Download"
+                color: root.downAccent
+                font.family: root.fontFamily
+                font.pixelSize: Style.font.caption
+                font.bold: true
               }
             }
 
@@ -874,8 +888,8 @@ Panel {
                     id: dayDateText
                     textFormat: Text.PlainText
                     anchors.left: parent.left
-                    anchors.right: dayMidDetails.left
-                    anchors.rightMargin: Style.space(8)
+                    anchors.right: histUpCol.left
+                    anchors.rightMargin: Style.space(12)
                     anchors.verticalCenter: parent.verticalCenter
                     text: Model.formatDate(modelData.date, modelData.is_today)
                     color: root.fg
@@ -885,41 +899,44 @@ Panel {
                     elide: Text.ElideRight
                   }
 
-                  // Mid detail: Download first, then upload
-                  Row {
-                    id: dayMidDetails
-                    anchors.right: dayValText.left
-                    anchors.rightMargin: Style.space(12)
+                  // Upload column (left/middle)
+                  Item {
+                    id: histUpCol
+                    anchors.right: histDownCol.left
+                    anchors.rightMargin: Style.space(16)
                     anchors.verticalCenter: parent.verticalCenter
-                    spacing: Style.space(6)
+                    width: Style.space(85)
+                    height: parent.height
 
                     Text {
                       textFormat: Text.PlainText
-                      text: "↓ " + Model.formatBytes(modelData.down)
-                      color: root.downAccent
-                      font.family: root.fontFamily
-                      font.pixelSize: Style.font.caption
-                    }
-
-                    Text {
-                      textFormat: Text.PlainText
+                      anchors.right: parent.right
+                      anchors.verticalCenter: parent.verticalCenter
                       text: "↑ " + Model.formatBytes(modelData.up)
                       color: root.upAccent
                       font.family: root.fontFamily
-                      font.pixelSize: Style.font.caption
+                      font.pixelSize: Style.font.body
                     }
                   }
 
-                  Text {
-                    id: dayValText
-                    textFormat: Text.PlainText
+                  // Download column (far right)
+                  Item {
+                    id: histDownCol
                     anchors.right: parent.right
                     anchors.verticalCenter: parent.verticalCenter
-                    text: Model.formatBytes(modelData.total)
-                    color: root.fg
-                    font.family: root.fontFamily
-                    font.pixelSize: Style.font.body
-                    font.bold: true
+                    width: Style.space(85)
+                    height: parent.height
+
+                    Text {
+                      textFormat: Text.PlainText
+                      anchors.right: parent.right
+                      anchors.verticalCenter: parent.verticalCenter
+                      text: "↓ " + Model.formatBytes(modelData.down)
+                      color: root.downAccent
+                      font.family: root.fontFamily
+                      font.pixelSize: Style.font.body
+                      font.bold: true
+                    }
                   }
                 }
               }
