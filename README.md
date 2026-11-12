@@ -1,19 +1,40 @@
 # Bandwidth Monitor for Omarchy
 
-Daily internet bandwidth monitor plugin for Omarchy / Quickshell. Shows live daily bandwidth consumption in the status bar and provides a detailed breakdown popup by application and 30-day historical usage.
+Daily internet bandwidth monitor plugin for Omarchy / Quickshell. Shows live daily bandwidth consumption and real-time network speeds directly in the status bar, paired with an interactive popup panel featuring process breakdowns and usage history.
 
-![Bandwidth Monitor Preview](assets/preview.png)
+![Bandwidth Monitor Preview](assets/overview.png)
 
 ## Features
 
-- **Status Bar Widget**: Shows live daily internet usage (`󰖟 2.6 GB`) directly in the top bar.
-- **Minimal, Clean Popup Panel**:
-  - Live summary with upload on the left, then download, then total (`↑ 798 MB · ↓ 5.5 GB · Total: 6.3 GB`).
-  - **Usage Tab**: Overview with side-by-side Upload and Download metric cards, traffic proportion bar, and top processes.
-  - **Current Tab**: Live per-process data usage breakdown for all active applications.
-  - **History Tab**: Daily data consumption archive for the past 14 days.
-  - **VPN & Proxy Support**: Inspects raw socket packets directly, allowing accurate process-level traffic tracking even when routing through VPNs or proxies (v2ray, WireGuard, OpenVPN, Tailscale, etc.).
-- **Efficient & Lightweight**: Minimalist design with zero unnecessary emoji bloat. Background accumulator daemon communicates with `bandwhich` via JSON streaming without high CPU overhead.
+- **Status Bar Widget**:
+  - Displays live daily data consumption (`󱘖 13 GB`) or instantaneous transfer rates.
+  - **Right-Click Cycling**: Right-click the bar widget anytime to cycle display modes:
+    1. **Total Daily Usage** (`󱘖 13 GB`)
+    2. **Current Download Speed** (`󱘖 ↓ 580 KB/s`)
+    3. **Current Upload Speed** (`󱘖 ↑ 45 KB/s`)
+  - Tooltip provides a quick summary of today's upload/download totals and active transfer speeds.
+
+- **Minimal, Modern Popup Panel**:
+  - **Compact Metric Cards**: Equal-width Upload (purple) and Download (cyan) summary cards with live speed subtext.
+  - **Subtle Daily Total**: Clean, understated total data transferred readout.
+  - **Overview Tab**: Full process breakdown ranked strictly by total bandwidth consumption (Upload + Download, highest consumer first).
+  - **Live Activity Tab**: Real-time throughput per process with separate Upload and Download speed columns (ranked by active speed).
+  - **Usage History Tab**: Daily bandwidth records archived for the past 30 days.
+
+- **VPN & Proxy Transparent**:
+  - Monitors raw socket packets directly via Linux capabilities.
+  - Accurate process-level attribution even when traffic is encapsulated or routed through VPNs and proxies (such as v2raya, WireGuard, OpenVPN, Clash, Tailscale, etc.).
+
+- **Efficient Daemon**:
+  - Communicates with `bandwhich` via JSON streaming with minimal CPU and memory overhead.
+
+---
+
+## Screenshots
+
+| Overview | Live Activity | Usage History |
+| :---: | :---: | :---: |
+| ![Overview](assets/overview.png) | ![Live Activity](assets/live_activity.png) | ![Usage History](assets/usage_history.png) |
 
 ---
 
@@ -31,7 +52,7 @@ sudo pacman -S bandwhich
 
 ### 2. Grant Network Capture Capabilities
 
-`bandwhich` needs permission to monitor raw network traffic and inspect process sockets without running as full root. Set the required Linux capabilities:
+`bandwhich` requires packet capture permissions to inspect socket traffic without running as root:
 
 ```bash
 sudo setcap 'cap_sys_ptrace,cap_dac_read_search,cap_net_raw,cap_net_admin+ep' $(which bandwhich)
@@ -47,13 +68,12 @@ Install using the Omarchy plugin CLI:
 omarchy plugin install https://github.com/theju-bot/bandwidth.git
 ```
 
-Once installed, add `theju-bot.bandwidth` to your bar configuration in `~/.config/omarchy/bar.json` (or via Omarchy Bar Settings):
+Once installed, add `theju-bot.bandwidth` to your bar configuration in `~/.config/omarchy/bar.json` (or via the Omarchy Settings panel):
 
 ```json
 {
   "right": [
-    "theju-bot.bandwidth",
-    ...
+    "theju-bot.bandwidth"
   ]
 }
 ```
@@ -64,10 +84,9 @@ Reload Quickshell / Omarchy to start the widget.
 
 ## Data & Storage
 
-Usage statistics and settings are kept in the standard user state directory:
-- `~/.local/state/omarchy/theju-bot.bandwidth/stats.json`: Daily and per-app byte counters.
-- `~/.local/state/omarchy/theju-bot.bandwidth/history.json`: Historical daily usage archives.
-- `~/.local/state/omarchy/theju-bot.bandwidth/config.json`: User interface preferences (e.g. Minimal mode).
+Usage statistics and state are stored in the standard XDG state directory:
+- `~/.local/state/omarchy/theju-bot.bandwidth/stats.json`: Daily totals and process byte counters.
+- `~/.local/state/omarchy/theju-bot.bandwidth/config.json`: Configuration settings.
 
 ---
 
@@ -79,7 +98,7 @@ To remove the plugin:
 omarchy plugin remove theju-bot.bandwidth
 ```
 
-Optionally remove state and history data:
+Optionally remove state data:
 
 ```bash
 rm -rf ~/.local/state/omarchy/theju-bot.bandwidth
