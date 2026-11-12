@@ -37,11 +37,70 @@ Panel {
   // Active tab: 0 = Overview, 1 = Live Activity, 2 = Usage History
   property int currentTab: 0
 
+  property bool themeAware: false
+  property var themePalette: ({})
+
   readonly property string fontFamily: Style.font.family
-  readonly property color fg: root.bar ? root.bar.barForeground : Color.foreground
-  readonly property color dimFg: Qt.darker(fg, 1.45)
-  readonly property color downAccent: "#38bdf8"
-  readonly property color upAccent: "#c084fc"
+  readonly property color fg: root.themeAware ? (Color.popups.text || Color.foreground) : (root.bar ? root.bar.barForeground : Color.foreground)
+  readonly property color dimFg: root.themeAware ? (Color.muted || Qt.darker(fg, 1.45)) : Qt.darker(fg, 1.45)
+  readonly property color downAccent: root.themeAware ? (root.themePalette.cyan || root.themePalette.blue || Color.accent || "#38bdf8") : "#38bdf8"
+  readonly property color upAccent: root.themeAware ? (root.themePalette.magenta || root.themePalette.accent || Color.urgent || "#c084fc") : "#c084fc"
+  readonly property color cardBg: root.themeAware ? Util.alpha(Color.popups.text || Color.foreground, 0.04) : Qt.rgba(1, 1, 1, 0.03)
+  readonly property color cardBorder: root.themeAware ? Util.alpha(Color.popups.border || Color.foreground, 0.12) : Qt.rgba(1, 1, 1, 0.06)
+
+  function parseThemeColors(raw) {
+    var lines = String(raw || "").split("\n");
+    var pal = {};
+    for (var i = 0; i < lines.length; i++) {
+      var match = lines[i].match(/^\s*([A-Za-z0-9_-]+)\s*=\s*["']?(#[0-9A-Fa-f]{6})/);
+      if (match) {
+        pal[match[1]] = match[2];
+      }
+    }
+    root.themePalette = pal;
+  }
+
+  FileView {
+    id: themeColorsFile
+    path: Quickshell.env("HOME") + "/.local/state/omarchy/current/theme/colors.toml"
+    watchChanges: true
+    printErrors: false
+    onLoaded: root.parseThemeColors(text())
+    onFileChanged: reload()
+  }
+
+  FileView {
+    id: configFileView
+    path: Quickshell.env("HOME") + "/.local/state/omarchy/theju-bot.bandwidth/config.json"
+    watchChanges: true
+    printErrors: false
+    onLoaded: {
+      try {
+        var c = JSON.parse(text());
+        if (c && typeof c.theme_aware === "boolean") {
+          root.themeAware = c.theme_aware;
+        }
+      } catch (e) {}
+    }
+    onFileChanged: reload()
+  }
+
+  Process {
+    id: setThemeAwareProc
+    running: false
+    property string targetVal: "0"
+    command: ["python3", root.pluginDir + "/bin/collector.py", "set-theme-aware", targetVal]
+  }
+
+  function toggleThemeAware() {
+    root.themeAware = !root.themeAware;
+    setThemeAwareProc.targetVal = root.themeAware ? "1" : "0";
+    setThemeAwareProc.running = true;
+  }
+
+  Component.onCompleted: {
+    if (themeColorsFile.text()) root.parseThemeColors(themeColorsFile.text());
+  }
 
   function refresh() {
     if (!statusProc.running) statusProc.running = true;
@@ -82,6 +141,9 @@ Panel {
           root.overviewApps = d.overview_apps || [];
           root.currentApps = d.current_apps || [];
           root.daysHistory = d.days || [];
+          if (typeof d.theme_aware === "boolean" && !setThemeAwareProc.running) {
+            root.themeAware = d.theme_aware;
+          }
         } catch (e) {}
       }
     }
@@ -130,38 +192,75 @@ Panel {
           spacing: Style.space(8)
 
           // ---------- Header Row ----------
-          Row {
+          Item {
             id: titleArea
             width: parent.width
-            spacing: Style.space(8)
+            implicitHeight: Math.max(leftHeader.implicitHeight, rightHeader.implicitHeight)
 
-            Text {
-              text: "󱘖"
-              font.family: "Symbols Nerd Font"
-              font.pixelSize: Style.space(22)
-              color: root.fg
+            Row {
+              id: leftHeader
+              anchors.left: parent.left
               anchors.verticalCenter: parent.verticalCenter
-            }
-
-            Column {
-              anchors.verticalCenter: parent.verticalCenter
-              spacing: Style.space(1)
+              spacing: Style.space(8)
 
               Text {
-                textFormat: Text.PlainText
-                text: "Internet Usage"
+                text: "󱘖"
+                font.family: "Symbols Nerd Font"
+                font.pixelSize: Style.space(22)
                 color: root.fg
-                font.family: root.fontFamily
-                font.pixelSize: Style.font.title
-                font.bold: true
+                anchors.verticalCenter: parent.verticalCenter
               }
 
+              Column {
+                anchors.verticalCenter: parent.verticalCenter
+                spacing: Style.space(1)
+
+                Text {
+                  textFormat: Text.PlainText
+                  text: "Internet Usage"
+                  color: root.fg
+                  font.family: root.fontFamily
+                  font.pixelSize: Style.font.title
+                  font.bold: true
+                }
+
+                Text {
+                  textFormat: Text.PlainText
+                  text: "TODAY'S BANDWIDTH (BANDWHICH)"
+                  color: root.dimFg
+                  font.family: root.fontFamily
+                  font.pixelSize: Style.font.caption
+                }
+              }
+            }
+
+            Row {
+              id: rightHeader
+              anchors.right: parent.right
+              anchors.verticalCenter: parent.verticalCenter
+              spacing: Style.space(6)
+
               Text {
                 textFormat: Text.PlainText
-                text: "TODAY'S BANDWIDTH (BANDWHICH)"
-                color: root.dimFg
+                text: "Theme"
+                color: root.themeAware ? root.fg : root.dimFg
                 font.family: root.fontFamily
                 font.pixelSize: Style.font.caption
+                font.bold: root.themeAware
+                anchors.verticalCenter: parent.verticalCenter
+
+                MouseArea {
+                  anchors.fill: parent
+                  cursorShape: Qt.PointingHandCursor
+                  onClicked: root.toggleThemeAware()
+                }
+              }
+
+              ToggleSwitch {
+                id: themeSwitch
+                anchors.verticalCenter: parent.verticalCenter
+                checked: root.themeAware
+                onToggled: root.toggleThemeAware()
               }
             }
           }
@@ -176,9 +275,9 @@ Panel {
               id: upMetricCard
               width: Math.floor((parent.width - Style.space(8)) / 2)
               implicitHeight: Style.space(60)
-              color: Qt.rgba(1, 1, 1, 0.03)
+              color: root.cardBg
               radius: Style.cornerRadius
-              borderSpec: Border.flat(Qt.rgba(1, 1, 1, 0.06), Math.max(1, Style.space(1)))
+              borderSpec: Border.flat(root.cardBorder, Math.max(1, Style.space(1)))
 
               Column {
                 anchors.centerIn: parent
@@ -233,9 +332,9 @@ Panel {
               id: downMetricCard
               width: parent.width - Style.space(8) - upMetricCard.width
               implicitHeight: Style.space(60)
-              color: Qt.rgba(1, 1, 1, 0.03)
+              color: root.cardBg
               radius: Style.cornerRadius
-              borderSpec: Border.flat(Qt.rgba(1, 1, 1, 0.06), Math.max(1, Style.space(1)))
+              borderSpec: Border.flat(root.cardBorder, Math.max(1, Style.space(1)))
 
               Column {
                 anchors.centerIn: parent
@@ -491,7 +590,7 @@ Panel {
                 width: tab2Txt.implicitWidth
                 height: 2
                 radius: 1
-                color: root.fg
+                color: root.themeAware ? (Color.accent || root.fg) : root.fg
               }
 
               MouseArea {
@@ -574,9 +673,9 @@ Panel {
                 required property var modelData
                 width: column.width
                 implicitHeight: Style.space(34)
-                color: Qt.rgba(1, 1, 1, 0.03)
+                color: root.cardBg
                 radius: Style.cornerRadius
-                borderSpec: Border.flat(Qt.rgba(1, 1, 1, 0.06), Math.max(1, Style.space(1)))
+                borderSpec: Border.flat(root.cardBorder, Math.max(1, Style.space(1)))
 
                 Item {
                   anchors.left: parent.left
@@ -715,9 +814,9 @@ Panel {
                 required property var modelData
                 width: column.width
                 implicitHeight: Style.space(34)
-                color: Qt.rgba(1, 1, 1, 0.03)
+                color: root.cardBg
                 radius: Style.cornerRadius
-                borderSpec: Border.flat(Qt.rgba(1, 1, 1, 0.06), Math.max(1, Style.space(1)))
+                borderSpec: Border.flat(root.cardBorder, Math.max(1, Style.space(1)))
 
                 Item {
                   anchors.left: parent.left
@@ -856,9 +955,9 @@ Panel {
                 required property var modelData
                 width: column.width
                 implicitHeight: Style.space(34)
-                color: Qt.rgba(1, 1, 1, 0.03)
+                color: root.cardBg
                 radius: Style.cornerRadius
-                borderSpec: Border.flat(Qt.rgba(1, 1, 1, 0.06), Math.max(1, Style.space(1)))
+                borderSpec: Border.flat(root.cardBorder, Math.max(1, Style.space(1)))
 
                 Item {
                   anchors.left: parent.left

@@ -90,6 +90,25 @@ def save_state(state):
     except Exception as e:
         sys.stderr.write(f"Error saving state: {e}\n")
 
+def load_config():
+    if CONFIG_FILE.exists():
+        try:
+            with open(CONFIG_FILE, "r", encoding="utf-8") as f:
+                return json.load(f)
+        except Exception:
+            pass
+    return {"theme_aware": False}
+
+def save_config(cfg):
+    STATE_DIR.mkdir(parents=True, exist_ok=True)
+    tmp_file = CONFIG_FILE.with_suffix(".tmp")
+    try:
+        with open(tmp_file, "w", encoding="utf-8") as f:
+            json.dump(cfg, f, indent=2)
+        os.replace(tmp_file, CONFIG_FILE)
+    except Exception as e:
+        sys.stderr.write(f"Error saving config: {e}\n")
+
 def check_bandwhich():
     bandwhich_path = shutil.which("bandwhich")
     if not bandwhich_path:
@@ -312,6 +331,8 @@ def run_status():
             "is_today": False
         })
 
+    cfg = load_config()
+
     result = {
         "date": today_date,
         "today_down": today_down,
@@ -323,6 +344,7 @@ def run_status():
         "status": status_val,
         "error": error_val,
         "error_type": error_type_val,
+        "theme_aware": bool(cfg.get("theme_aware", False)),
         "overview_apps": all_apps[:20],
         "current_apps": current_apps,
         "top_downloads": top_downloads[:8],
@@ -334,5 +356,11 @@ def run_status():
 if __name__ == "__main__":
     if len(sys.argv) > 1 and sys.argv[1] == "daemon":
         run_daemon()
+    elif len(sys.argv) > 2 and sys.argv[1] == "set-theme-aware":
+        val = sys.argv[2].lower() in ("1", "true", "yes", "on")
+        cfg = load_config()
+        cfg["theme_aware"] = val
+        save_config(cfg)
+        print(json.dumps({"theme_aware": val}))
     else:
         run_status()
