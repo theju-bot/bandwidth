@@ -195,7 +195,7 @@ Panel {
           Item {
             id: titleArea
             width: parent.width
-            implicitHeight: Math.max(leftHeader.implicitHeight, rightHeader.implicitHeight)
+            implicitHeight: Math.max(leftHeader.implicitHeight, themeSwitch.implicitHeight)
 
             Row {
               id: leftHeader
@@ -234,33 +234,23 @@ Panel {
               }
             }
 
-            Row {
-              id: rightHeader
+            ToggleSwitch {
+              id: themeSwitch
               anchors.right: parent.right
               anchors.verticalCenter: parent.verticalCenter
-              spacing: Style.space(6)
+              checked: root.themeAware
+              trackHeight: Style.space(14)
+              cursorRing: false
+              foreground: root.dimFg
+              accent: root.themeAware ? (root.themePalette.accent || Color.accent || root.fg) : root.dimFg
+              opacity: themeSwitch.containsMouse ? 1.0 : (root.themeAware ? 0.75 : 0.4)
+              onToggled: root.toggleThemeAware()
 
-              Text {
-                textFormat: Text.PlainText
-                text: "Theme"
-                color: root.themeAware ? root.fg : root.dimFg
-                font.family: root.fontFamily
-                font.pixelSize: Style.font.caption
-                font.bold: root.themeAware
-                anchors.verticalCenter: parent.verticalCenter
+              Behavior on opacity { NumberAnimation { duration: Style.duration(120) } }
 
-                MouseArea {
-                  anchors.fill: parent
-                  cursorShape: Qt.PointingHandCursor
-                  onClicked: root.toggleThemeAware()
-                }
-              }
-
-              ToggleSwitch {
-                id: themeSwitch
-                anchors.verticalCenter: parent.verticalCenter
-                checked: root.themeAware
-                onToggled: root.toggleThemeAware()
+              PanelToolTip {
+                visible: themeSwitch.containsMouse
+                text: root.themeAware ? "Theme: On (matching system theme)" : "Theme: Off (default palette)"
               }
             }
           }
