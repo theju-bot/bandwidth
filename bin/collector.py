@@ -25,6 +25,36 @@ STATE_FILE = STATE_DIR / "stats.json"
 CONFIG_FILE = STATE_DIR / "config.json"
 LOCK_FILE = STATE_DIR / "daemon.lock"
 
+# Known local proxy and tunnel daemons that forward other applications' traffic.
+# Counting both the client application and the local proxy core causes double-counting
+# of all bandwidth metrics (live speeds, process usage, and daily totals).
+PROXY_DAEMONS = {
+    "v2raya_core", "v2raya",
+    "xray", "v2ray", "xray-core", "v2ray-core",
+    "sing-box",
+    "clash", "clash-meta", "mihomo", "clash-verge",
+    "dae", "daed",
+    "sslocal", "ss-local", "ssserver", "shadowsocks-rust",
+    "redsocks",
+    "privoxy",
+    "tor",
+    "openvpn"
+}
+
+def sanitize_state(data):
+    if not isinstance(data, dict):
+        return data
+    apps = data.get("apps", {})
+    pruned = False
+    for proxy_name in list(apps.keys()):
+        if proxy_name.lower() in PROXY_DAEMONS:
+            del apps[proxy_name]
+            pruned = True
+    if pruned:
+        data["today_down"] = sum(a.get("down", 0) for a in apps.values())
+        data["today_up"] = sum(a.get("up", 0) for a in apps.values())
+    return data
+
 LINE_REGEX = re.compile(r'process:\s+<\d+>\s+"([^"]+)"\s+up/down\s+Bps:\s+(\d+)/(\d+)')
 
 def get_today_str():
@@ -37,6 +67,7 @@ def load_state():
         try:
             with open(STATE_FILE, "r", encoding="utf-8") as f:
                 data = json.load(f)
+                data = sanitize_state(data)
                 file_date = data.get("date", today)
                 history = data.get("history", {})
 
@@ -93,6 +124,7 @@ def save_state(state):
             try:
                 with open(STATE_FILE, "r", encoding="utf-8") as f:
                     existing = json.load(f)
+                existing = sanitize_state(existing)
                 if existing.get("date") == state.get("date"):
                     if existing.get("today_down", 0) > state.get("today_down", 0):
                         state["today_down"] = existing["today_down"]
@@ -284,6 +316,10 @@ def run_daemon():
                 app_name = match.group(1)
                 up_bytes = int(match.group(2))
                 down_bytes = int(match.group(3))
+
+                # Skip proxy daemons so app traffic isn't counted twice
+                if app_name.lower() in PROXY_DAEMONS:
+                    continue
 
                 if up_bytes > 0 or down_bytes > 0:
                     state["today_up"] += up_bytes
