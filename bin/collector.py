@@ -169,10 +169,12 @@ def save_config(cfg):
     except Exception as e:
         sys.stderr.write(f"Error saving config: {e}\n")
 
-def check_bandwhich():
+def check_bandwhich(probe=False):
     bandwhich_path = shutil.which("bandwhich")
     if not bandwhich_path:
         return False, "not_installed", "bandwhich is not installed. Please install it (e.g. sudo pacman -S bandwhich)."
+    if not probe:
+        return True, "", ""
 
     try:
         proc = subprocess.run(
@@ -219,15 +221,16 @@ def run_daemon():
             except Exception:
                 try:
                     proc.kill()
+                    proc.wait(timeout=1)
                 except Exception:
                     pass
-        sys.exit(0)
+        os._exit(0)
 
     signal.signal(signal.SIGTERM, handle_exit)
     signal.signal(signal.SIGINT, handle_exit)
 
     bandwhich_bin = shutil.which("bandwhich") or "/usr/bin/bandwhich"
-    ok, err_type, err_msg = check_bandwhich()
+    ok, err_type, err_msg = check_bandwhich(probe=True)
     if not ok:
         state = load_state()
         state["status"] = "error"
@@ -237,7 +240,7 @@ def run_daemon():
         sys.stderr.write(f"{err_msg}\n")
         while True:
             time.sleep(5)
-            ok, err_type, err_msg = check_bandwhich()
+            ok, err_type, err_msg = check_bandwhich(probe=True)
             if ok:
                 break
             state["error_type"] = err_type
@@ -251,12 +254,14 @@ def run_daemon():
     if "error_type" in state:
         del state["error_type"]
 
+    err_log = STATE_DIR / "bandwhich_err.log"
     while True:
         try:
+            err_f = open(err_log, "w", encoding="utf-8")
             proc = subprocess.Popen(
                 [bandwhich_bin, "--raw", "--processes", "-u", "bin-bytes"],
                 stdout=subprocess.PIPE,
-                stderr=subprocess.PIPE,
+                stderr=err_f,
                 text=True,
                 bufsize=1
             )
@@ -337,7 +342,31 @@ def run_daemon():
                         current_tick_rates[app_name]["up"] += up_bytes
                         current_tick_rates[app_name]["down"] += down_bytes
 
-        stderr_output = proc.stderr.read() if proc.stderr else ""
+        # Reap child process to prevent zombie/defunct processes
+        if proc:
+            try:
+                proc.terminate()
+                proc.wait(timeout=1)
+            except Exception:
+                try:
+                    proc.kill()
+                    proc.wait(timeout=1)
+                except Exception:
+                    pass
+
+        try:
+            err_f.close()
+        except Exception:
+            pass
+
+        stderr_output = ""
+        if err_log.exists():
+            try:
+                with open(err_log, "r", encoding="utf-8") as f:
+                    stderr_output = f.read()
+            except Exception:
+                pass
+
         if "Insufficient permissions" in stderr_output:
             state["status"] = "error"
             state["error_type"] = "permission"
@@ -347,7 +376,7 @@ def run_daemon():
         time.sleep(2)
 
 def run_status():
-    ok, err_type, err_msg = check_bandwhich()
+    ok, err_type, err_msg = check_bandwhich(probe=False)
     state = load_state()
 
     status_val = state.get("status", "ok")

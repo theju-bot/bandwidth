@@ -2,7 +2,7 @@
   "schemaVersion": 1,
   "id": "theju-bot.bandwidth",
   "name": "Bandwidth",
-  "version": "1.0.3",
+  "version": "1.0.4",
   "author": "Thesigan Yogarasa",
   "license": "MIT",
   "description": "Daily internet bandwidth monitor powered by bandwhich: live usage in the bar, per-app breakdown, and history.",

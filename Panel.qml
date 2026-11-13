@@ -103,6 +103,7 @@ Panel {
   }
 
   function refresh() {
+    if (!daemonProc.running) daemonProc.running = true;
     if (!statusProc.running) statusProc.running = true;
   }
 
