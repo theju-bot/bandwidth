@@ -286,7 +286,7 @@ Panel {
                 Text {
                   anchors.horizontalCenter: parent.horizontalCenter
                   textFormat: Text.PlainText
-                  text: Model.formatBytes(root.todayUp)
+                  text: Model.formatBytes(root.todayUp, 2)
                   color: root.upAccent
                   font.family: root.fontFamily
                   font.pixelSize: Style.space(18)
@@ -343,7 +343,7 @@ Panel {
                 Text {
                   anchors.horizontalCenter: parent.horizontalCenter
                   textFormat: Text.PlainText
-                  text: Model.formatBytes(root.todayDown)
+                  text: Model.formatBytes(root.todayDown, 2)
                   color: root.downAccent
                   font.family: root.fontFamily
                   font.pixelSize: Style.space(18)
@@ -395,7 +395,7 @@ Panel {
 
               Text {
                 textFormat: Text.PlainText
-                text: Model.formatBytes(root.todayTotal)
+                text: Model.formatBytes(root.todayTotal, 2)
                 color: root.fg
                 font.family: root.fontFamily
                 font.pixelSize: Style.font.caption

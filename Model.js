@@ -1,4 +1,4 @@
-function formatBytes(bytes) {
+function formatBytes(bytes, decimals) {
   var b = Number(bytes) || 0;
   if (b <= 0) return "0 B";
   var units = ["B", "KB", "MB", "GB", "TB"];
@@ -7,7 +7,9 @@ function formatBytes(bytes) {
     b /= 1024.0;
     i++;
   }
-  return (i === 0 ? b.toFixed(0) : b.toFixed(b < 10 ? 1 : 0)) + " " + units[i];
+  if (i === 0) return b.toFixed(0) + " " + units[i];
+  var dec = (typeof decimals === "number") ? decimals : (b < 10 ? 1 : 0);
+  return b.toFixed(dec) + " " + units[i];
 }
 
 function formatSpeed(bytesPerSec) {

@@ -30,7 +30,7 @@ BarWidget {
     } else if (root.displayMode === 2) {
       return root.markGlyph + " ↑ " + Model.formatSpeed(root.currentUpBps)
     } else {
-      return root.markGlyph + " " + Model.formatBytes(root.todayTotal)
+      return root.markGlyph + " " + Model.formatBytes(root.todayTotal, 2)
     }
   }
 
@@ -89,11 +89,11 @@ BarWidget {
     hasVisualContent: text !== ""
     tooltipText: panel && panel.status === "error"
       ? (panel.errorMessage || (panel.errorType === "not_installed" ? "bandwhich is not installed (sudo pacman -S bandwhich)" : "bandwhich permission required"))
-      : (root.displayMode === 0 ? "Total Today: " + Model.formatBytes(root.todayTotal)
+      : (root.displayMode === 0 ? "Total Today: " + Model.formatBytes(root.todayTotal, 2)
           : (root.displayMode === 1 ? "Download Speed: " + Model.formatSpeed(root.currentDownBps)
              : "Upload Speed: " + Model.formatSpeed(root.currentUpBps)))
         + " (Right-click to cycle)\n"
-        + "Today: ↓ " + Model.formatBytes(panel ? panel.todayDown : 0) + "  ↑ " + Model.formatBytes(panel ? panel.todayUp : 0) + "\n"
+        + "Today: ↓ " + Model.formatBytes(panel ? panel.todayDown : 0, 2) + "  ↑ " + Model.formatBytes(panel ? panel.todayUp : 0, 2) + "\n"
         + "Live: ↓ " + Model.formatSpeed(root.currentDownBps) + "  ↑ " + Model.formatSpeed(root.currentUpBps)
 
     onPressed: function(b) {
