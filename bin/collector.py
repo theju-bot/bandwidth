@@ -6,6 +6,9 @@ import time
 import re
 import shutil
 import subprocess
+import fcntl
+import signal
+import ctypes
 from datetime import date
 from pathlib import Path
 
@@ -20,6 +23,7 @@ if not STATE_DIR.exists() and LEGACY_DIR.exists():
 
 STATE_FILE = STATE_DIR / "stats.json"
 CONFIG_FILE = STATE_DIR / "config.json"
+LOCK_FILE = STATE_DIR / "daemon.lock"
 
 LINE_REGEX = re.compile(r'process:\s+<\d+>\s+"([^"]+)"\s+up/down\s+Bps:\s+(\d+)/(\d+)')
 
@@ -84,11 +88,35 @@ def save_state(state):
     STATE_DIR.mkdir(parents=True, exist_ok=True)
     tmp_file = STATE_FILE.with_suffix(".tmp")
     try:
+        # Guarantee monotonicity: today's counters can never regress for the same date
+        if STATE_FILE.exists():
+            try:
+                with open(STATE_FILE, "r", encoding="utf-8") as f:
+                    existing = json.load(f)
+                if existing.get("date") == state.get("date"):
+                    if existing.get("today_down", 0) > state.get("today_down", 0):
+                        state["today_down"] = existing["today_down"]
+                    if existing.get("today_up", 0) > state.get("today_up", 0):
+                        state["today_up"] = existing["today_up"]
+            except Exception:
+                pass
+
         with open(tmp_file, "w", encoding="utf-8") as f:
             json.dump(state, f)
         os.replace(tmp_file, STATE_FILE)
     except Exception as e:
         sys.stderr.write(f"Error saving state: {e}\n")
+
+def acquire_daemon_lock():
+    STATE_DIR.mkdir(parents=True, exist_ok=True)
+    try:
+        lock_fd = os.open(LOCK_FILE, os.O_CREAT | os.O_RDWR, 0o644)
+        fcntl.flock(lock_fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        os.ftruncate(lock_fd, 0)
+        os.write(lock_fd, f"{os.getpid()}\n".encode("utf-8"))
+        return lock_fd
+    except (BlockingIOError, OSError):
+        return None
 
 def load_config():
     if CONFIG_FILE.exists():
@@ -132,6 +160,40 @@ def check_bandwhich():
     return True, "", ""
 
 def run_daemon():
+    lock_fd = acquire_daemon_lock()
+    if lock_fd is None:
+        try:
+            with open(LOCK_FILE, "r") as f:
+                running_pid = f.read().strip()
+        except Exception:
+            running_pid = "unknown"
+        sys.stderr.write(f"Bandwidth collector daemon is already running (PID {running_pid}). Exiting.\n")
+        sys.exit(0)
+
+    # Terminate automatically if parent process (e.g. Quickshell) exits
+    try:
+        libc = ctypes.CDLL("libc.so.6")
+        libc.prctl(1, signal.SIGTERM)  # PR_SET_PDEATHSIG = 1
+    except Exception:
+        pass
+
+    proc = None
+    def handle_exit(signum=None, frame=None):
+        nonlocal proc
+        if proc and proc.poll() is None:
+            try:
+                proc.terminate()
+                proc.wait(timeout=1)
+            except Exception:
+                try:
+                    proc.kill()
+                except Exception:
+                    pass
+        sys.exit(0)
+
+    signal.signal(signal.SIGTERM, handle_exit)
+    signal.signal(signal.SIGINT, handle_exit)
+
     bandwhich_bin = shutil.which("bandwhich") or "/usr/bin/bandwhich"
     ok, err_type, err_msg = check_bandwhich()
     if not ok:
@@ -230,10 +292,14 @@ def run_daemon():
                     app_record["down"] += down_bytes
                     app_record["up"] += up_bytes
 
-                    current_tick_rates[app_name] = {
-                        "up": up_bytes,
-                        "down": down_bytes
-                    }
+                    if app_name not in current_tick_rates:
+                        current_tick_rates[app_name] = {
+                            "up": up_bytes,
+                            "down": down_bytes
+                        }
+                    else:
+                        current_tick_rates[app_name]["up"] += up_bytes
+                        current_tick_rates[app_name]["down"] += down_bytes
 
         stderr_output = proc.stderr.read() if proc.stderr else ""
         if "Insufficient permissions" in stderr_output:
