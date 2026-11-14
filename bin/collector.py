@@ -9,6 +9,7 @@ import subprocess
 import fcntl
 import signal
 import ctypes
+import socket
 from datetime import date
 from pathlib import Path
 
@@ -41,11 +42,44 @@ PROXY_DAEMONS = {
     "openvpn"
 }
 
+def get_hardware_bytes():
+    rx, tx = 0, 0
+    try:
+        with open("/proc/net/dev", "r", encoding="utf-8") as f:
+            for line in f.readlines()[2:]:
+                if ":" not in line:
+                    continue
+                name, _, rest = line.partition(":")
+                iface = name.strip()
+                if iface == "lo" or iface.startswith(("veth", "docker", "br-", "virbr", "tun", "tap", "wg")):
+                    continue
+                parts = rest.split()
+                if len(parts) >= 9:
+                    rx += int(parts[0])
+                    tx += int(parts[8])
+    except Exception:
+        pass
+    return rx, tx
+
+def get_local_hosts():
+    hosts = {"localhost", "127.0.0.1", "::1", "0.0.0.0", "::"}
+    try:
+        h = socket.gethostname().lower()
+        hosts.add(h)
+        hosts.add(f"{h}.")
+        for ip in socket.gethostbyname_ex(h)[2]:
+            hosts.add(ip)
+    except Exception:
+        pass
+    return hosts
+
+LOCAL_HOSTS = get_local_hosts()
+
 def is_local_address(addr):
     if not addr:
         return True
     a = addr.lower().rstrip(".")
-    if a in ("localhost", "127.0.0.1", "::1", "0.0.0.0", "::"):
+    if a in LOCAL_HOSTS or f"{a}." in LOCAL_HOSTS:
         return True
     if a.startswith("127.") or a.startswith("::ffff:127."):
         return True
@@ -67,12 +101,14 @@ def sanitize_state(data):
     if "language_server" in apps and apps["language_server"].get("up", 0) > apps["language_server"].get("down", 0) + 1048576:
         apps["language_server"]["up"] = apps["language_server"].get("down", 0) + 1048576
         pruned = True
-    if pruned:
+    if pruned and data.get("today_down", 0) == 0:
         data["today_down"] = sum(a.get("down", 0) for a in apps.values())
         data["today_up"] = sum(a.get("up", 0) for a in apps.values())
     return data
 
-CONN_REGEX = re.compile(r'connection:\s+<\d+>\s+<([^>]+)>:\d+\s+=>\s+(\S+?):(\d+)\s+\((\w+)\)\s+up/down\s+Bps:\s+(\d+)/(\d+)\s+process:\s+"([^"]+)"')
+CONN_REGEX = re.compile(
+    r'connection:\s+<\d+>\s+<([^>]+)>:(\d+)\s+=>\s+(\S+?):(\d+)\s+\((\w+)\)\s+up/down\s+Bps:\s+(\d+)/(\d+)\s+process:\s+"([^"]+)"'
+)
 
 def get_today_str():
     return date.today().isoformat()
@@ -143,10 +179,8 @@ def save_state(state):
                     existing = json.load(f)
                 existing = sanitize_state(existing)
                 if existing.get("date") == state.get("date"):
-                    existing_down = sum(a.get("down", 0) for a in existing.get("apps", {}).values())
-                    existing_up = sum(a.get("up", 0) for a in existing.get("apps", {}).values())
-                    state["today_down"] = max(state.get("today_down", 0), existing_down)
-                    state["today_up"] = max(state.get("today_up", 0), existing_up)
+                    state["today_down"] = max(state.get("today_down", 0), existing.get("today_down", 0))
+                    state["today_up"] = max(state.get("today_up", 0), existing.get("today_up", 0))
             except Exception:
                 pass
 
@@ -290,81 +324,134 @@ def run_daemon():
             time.sleep(5)
             continue
 
-        current_tick_rates = {}
+        port_to_app = {}
+        tick_lines = []
+        prev_hw_rx, prev_hw_tx = get_hardware_bytes()
+        prev_hw_time = time.time()
 
         for line in proc.stdout:
             line_str = line.strip()
             if line_str.startswith("Refreshing:"):
                 # End of a 1-second sample tick
-                up_bps = sum(r.get("up", 0) for r in current_tick_rates.values())
-                down_bps = sum(r.get("down", 0) for r in current_tick_rates.values())
+                now = time.time()
+                curr_hw_rx, curr_hw_tx = get_hardware_bytes()
+                dt = max(0.1, now - prev_hw_time)
+                delta_hw_rx = max(0, curr_hw_rx - prev_hw_rx) if prev_hw_rx is not None else 0
+                delta_hw_tx = max(0, curr_hw_tx - prev_hw_tx) if prev_hw_tx is not None else 0
+                prev_hw_rx, prev_hw_tx, prev_hw_time = curr_hw_rx, curr_hw_tx, now
+
+                hw_down_bps = int(delta_hw_rx / dt)
+                hw_up_bps = int(delta_hw_tx / dt)
+
+                # Pass 1: map outgoing client ports to application names
+                for l in tick_lines:
+                    m = CONN_REGEX.match(l)
+                    if not m:
+                        continue
+                    iface, lport, rhost, rport, proto, up_str, down_str, app_name = m.groups()
+                    if app_name.lower() not in PROXY_DAEMONS and app_name != "<UNKNOWN>":
+                        port_to_app[lport] = (app_name, now)
+
+                # Pass 2: attribute bandwidth
+                current_tick_rates = {}
+                for l in tick_lines:
+                    m = CONN_REGEX.match(l)
+                    if not m:
+                        continue
+                    iface, lport, rhost, rport, proto, up_str, down_str, app_name = m.groups()
+                    up_bytes = int(up_str)
+                    down_bytes = int(down_str)
+
+                    # Proxied traffic via local transparent proxy:
+                    if app_name.lower() in PROXY_DAEMONS:
+                        if iface == "lo" and is_local_address(rhost) and rport in port_to_app:
+                            real_app = port_to_app[rport][0]
+                            # Proxy received data from client port -> client's upload!
+                            if down_bytes > 0:
+                                rates = current_tick_rates.setdefault(real_app, {"up": 0, "down": 0})
+                                rates["up"] += down_bytes
+                        continue
+
+                    if app_name == "<UNKNOWN>":
+                        continue
+
+                    if iface == "lo":
+                        # Skip local loopback IPC (e.g. language_server <-> editor)
+                        if is_local_address(rhost):
+                            continue
+                        if up_bytes > 0 or down_bytes > 0:
+                            rates = current_tick_rates.setdefault(app_name, {"up": 0, "down": 0})
+                            rates["up"] += up_bytes
+                            rates["down"] += down_bytes
+                    else:
+                        # Physical interface direct traffic
+                        if not is_local_address(rhost):
+                            if up_bytes > 0 or down_bytes > 0:
+                                rates = current_tick_rates.setdefault(app_name, {"up": 0, "down": 0})
+                                rates["up"] += up_bytes
+                                rates["down"] += down_bytes
+
+                # Prune client port map entries older than 60s
+                for p in list(port_to_app.keys()):
+                    if now - port_to_app[p][1] > 60:
+                        del port_to_app[p]
+
+                tick_lines = []
+
+                current_today = get_today_str()
+                if state.get("date") != current_today:
+                    prev_date = state.get("date", current_today)
+                    prev_down = state.get("today_down", 0)
+                    prev_up = state.get("today_up", 0)
+                    history = state.get("history", {})
+                    if prev_down > 0 or prev_up > 0:
+                        history[prev_date] = {
+                            "down": prev_down,
+                            "up": prev_up,
+                            "total": prev_down + prev_up
+                        }
+
+                    state = {
+                        "date": current_today,
+                        "today_down": 0,
+                        "today_up": 0,
+                        "apps": {},
+                        "history": history,
+                        "status": "ok",
+                        "current_up_bps": 0,
+                        "current_down_bps": 0,
+                        "current_rates": {}
+                    }
+
+                app_up_bps = sum(r.get("up", 0) for r in current_tick_rates.values())
+                app_down_bps = sum(r.get("down", 0) for r in current_tick_rates.values())
 
                 for app_name, rates in current_tick_rates.items():
                     u = rates.get("up", 0)
                     d = rates.get("down", 0)
-                    state["today_up"] += u
-                    state["today_down"] += d
                     app_record = state["apps"].setdefault(app_name, {"down": 0, "up": 0})
                     app_record["down"] += d
                     app_record["up"] += u
 
-                state["current_up_bps"] = up_bps
-                state["current_down_bps"] = down_bps
+                # Hardware interface delta guarantees exact totals matching system Wi-Fi/Ethernet
+                if delta_hw_rx > 0 or delta_hw_tx > 0:
+                    state["today_down"] += delta_hw_rx
+                    state["today_up"] += delta_hw_tx
+                    state["current_down_bps"] = max(hw_down_bps, app_down_bps)
+                    state["current_up_bps"] = max(hw_up_bps, app_up_bps)
+                else:
+                    state["today_down"] += app_down_bps
+                    state["today_up"] += app_up_bps
+                    state["current_down_bps"] = app_down_bps
+                    state["current_up_bps"] = app_up_bps
+
                 state["current_rates"] = current_tick_rates
-                state["last_tick_time"] = time.time()
+                state["last_tick_time"] = now
 
                 save_state(state)
-                current_tick_rates = {}
                 continue
 
-            current_today = get_today_str()
-            if state.get("date") != current_today:
-                prev_date = state.get("date", current_today)
-                prev_down = state.get("today_down", 0)
-                prev_up = state.get("today_up", 0)
-                history = state.get("history", {})
-                if prev_down > 0 or prev_up > 0:
-                    history[prev_date] = {
-                        "down": prev_down,
-                        "up": prev_up,
-                        "total": prev_down + prev_up
-                    }
-
-                state = {
-                    "date": current_today,
-                    "today_down": 0,
-                    "today_up": 0,
-                    "apps": {},
-                    "history": history,
-                    "status": "ok",
-                    "current_up_bps": 0,
-                    "current_down_bps": 0,
-                    "current_rates": {}
-                }
-
-            match = CONN_REGEX.match(line_str)
-            if match:
-                iface, remote_host, rport, proto, up_str, down_str, app_name = match.groups()
-                up_bytes = int(up_str)
-                down_bytes = int(down_str)
-
-                # Skip local machine loopback/IPC traffic (e.g. 127.0.0.1, localhost)
-                if is_local_address(remote_host):
-                    continue
-
-                # Skip proxy daemons and unmapped kernel shadow sockets (<UNKNOWN>)
-                if app_name.lower() in PROXY_DAEMONS or app_name == "<UNKNOWN>":
-                    continue
-
-                if up_bytes > 0 or down_bytes > 0:
-                    if app_name not in current_tick_rates:
-                        current_tick_rates[app_name] = {
-                            "up": up_bytes,
-                            "down": down_bytes
-                        }
-                    else:
-                        current_tick_rates[app_name]["up"] += up_bytes
-                        current_tick_rates[app_name]["down"] += down_bytes
+            tick_lines.append(line_str)
 
         # Reap child process to prevent zombie/defunct processes
         if proc:
