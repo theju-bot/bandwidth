@@ -41,21 +41,38 @@ PROXY_DAEMONS = {
     "openvpn"
 }
 
+def is_local_address(addr):
+    if not addr:
+        return True
+    a = addr.lower().rstrip(".")
+    if a in ("localhost", "127.0.0.1", "::1", "0.0.0.0", "::"):
+        return True
+    if a.startswith("127.") or a.startswith("::ffff:127."):
+        return True
+    return False
+
 def sanitize_state(data):
     if not isinstance(data, dict):
         return data
     apps = data.get("apps", {})
     pruned = False
-    for proxy_name in list(apps.keys()):
-        if proxy_name.lower() in PROXY_DAEMONS:
-            del apps[proxy_name]
+    for bad_name in list(apps.keys()):
+        if bad_name.lower() in PROXY_DAEMONS or bad_name == "<UNKNOWN>":
+            del apps[bad_name]
             pruned = True
+    for local_tool in ("antigravity", "npm exec chrome", "npm exec mongod", "node-MainThread"):
+        if local_tool in apps:
+            del apps[local_tool]
+            pruned = True
+    if "language_server" in apps and apps["language_server"].get("up", 0) > apps["language_server"].get("down", 0) + 1048576:
+        apps["language_server"]["up"] = apps["language_server"].get("down", 0) + 1048576
+        pruned = True
     if pruned:
         data["today_down"] = sum(a.get("down", 0) for a in apps.values())
         data["today_up"] = sum(a.get("up", 0) for a in apps.values())
     return data
 
-LINE_REGEX = re.compile(r'process:\s+<\d+>\s+"([^"]+)"\s+up/down\s+Bps:\s+(\d+)/(\d+)')
+CONN_REGEX = re.compile(r'connection:\s+<\d+>\s+<([^>]+)>:\d+\s+=>\s+(\S+?):(\d+)\s+\((\w+)\)\s+up/down\s+Bps:\s+(\d+)/(\d+)\s+process:\s+"([^"]+)"')
 
 def get_today_str():
     return date.today().isoformat()
@@ -126,10 +143,10 @@ def save_state(state):
                     existing = json.load(f)
                 existing = sanitize_state(existing)
                 if existing.get("date") == state.get("date"):
-                    if existing.get("today_down", 0) > state.get("today_down", 0):
-                        state["today_down"] = existing["today_down"]
-                    if existing.get("today_up", 0) > state.get("today_up", 0):
-                        state["today_up"] = existing["today_up"]
+                    existing_down = sum(a.get("down", 0) for a in existing.get("apps", {}).values())
+                    existing_up = sum(a.get("up", 0) for a in existing.get("apps", {}).values())
+                    state["today_down"] = max(state.get("today_down", 0), existing_down)
+                    state["today_up"] = max(state.get("today_up", 0), existing_up)
             except Exception:
                 pass
 
@@ -259,7 +276,7 @@ def run_daemon():
         try:
             err_f = open(err_log, "w", encoding="utf-8")
             proc = subprocess.Popen(
-                [bandwhich_bin, "--raw", "--processes", "-u", "bin-bytes"],
+                [bandwhich_bin, "--raw", "--connections", "-u", "bin-bytes"],
                 stdout=subprocess.PIPE,
                 stderr=err_f,
                 text=True,
@@ -281,6 +298,15 @@ def run_daemon():
                 # End of a 1-second sample tick
                 up_bps = sum(r.get("up", 0) for r in current_tick_rates.values())
                 down_bps = sum(r.get("down", 0) for r in current_tick_rates.values())
+
+                for app_name, rates in current_tick_rates.items():
+                    u = rates.get("up", 0)
+                    d = rates.get("down", 0)
+                    state["today_up"] += u
+                    state["today_down"] += d
+                    app_record = state["apps"].setdefault(app_name, {"down": 0, "up": 0})
+                    app_record["down"] += d
+                    app_record["up"] += u
 
                 state["current_up_bps"] = up_bps
                 state["current_down_bps"] = down_bps
@@ -316,23 +342,21 @@ def run_daemon():
                     "current_rates": {}
                 }
 
-            match = LINE_REGEX.match(line_str)
+            match = CONN_REGEX.match(line_str)
             if match:
-                app_name = match.group(1)
-                up_bytes = int(match.group(2))
-                down_bytes = int(match.group(3))
+                iface, remote_host, rport, proto, up_str, down_str, app_name = match.groups()
+                up_bytes = int(up_str)
+                down_bytes = int(down_str)
 
-                # Skip proxy daemons so app traffic isn't counted twice
-                if app_name.lower() in PROXY_DAEMONS:
+                # Skip local machine loopback/IPC traffic (e.g. 127.0.0.1, localhost)
+                if is_local_address(remote_host):
+                    continue
+
+                # Skip proxy daemons and unmapped kernel shadow sockets (<UNKNOWN>)
+                if app_name.lower() in PROXY_DAEMONS or app_name == "<UNKNOWN>":
                     continue
 
                 if up_bytes > 0 or down_bytes > 0:
-                    state["today_up"] += up_bytes
-                    state["today_down"] += down_bytes
-                    app_record = state["apps"].setdefault(app_name, {"down": 0, "up": 0})
-                    app_record["down"] += down_bytes
-                    app_record["up"] += up_bytes
-
                     if app_name not in current_tick_rates:
                         current_tick_rates[app_name] = {
                             "up": up_bytes,
