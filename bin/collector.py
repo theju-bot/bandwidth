@@ -433,17 +433,23 @@ def run_daemon():
                     app_record["down"] += d
                     app_record["up"] += u
 
-                # Hardware interface delta guarantees exact totals matching system Wi-Fi/Ethernet
-                if delta_hw_rx > 0 or delta_hw_tx > 0:
-                    state["today_down"] += delta_hw_rx
-                    state["today_up"] += delta_hw_tx
-                    state["current_down_bps"] = max(hw_down_bps, app_down_bps)
-                    state["current_up_bps"] = max(hw_up_bps, app_up_bps)
-                else:
-                    state["today_down"] += app_down_bps
-                    state["today_up"] += app_up_bps
-                    state["current_down_bps"] = app_down_bps
-                    state["current_up_bps"] = app_up_bps
+                # In each tick, total consumed is at least app activity, and at least wire traffic
+                tick_down = max(delta_hw_rx, app_down_bps)
+                tick_up = max(delta_hw_tx, app_up_bps)
+
+                state["today_down"] += tick_down
+                state["today_up"] += tick_up
+
+                # Invariant: Total day usage can never be less than the sum of individual apps
+                apps_down_sum = sum(a.get("down", 0) for a in state["apps"].values())
+                apps_up_sum = sum(a.get("up", 0) for a in state["apps"].values())
+                if state["today_down"] < apps_down_sum:
+                    state["today_down"] = apps_down_sum
+                if state["today_up"] < apps_up_sum:
+                    state["today_up"] = apps_up_sum
+
+                state["current_down_bps"] = max(hw_down_bps, app_down_bps)
+                state["current_up_bps"] = max(hw_up_bps, app_up_bps)
 
                 state["current_rates"] = current_tick_rates
                 state["last_tick_time"] = now
@@ -498,8 +504,12 @@ def run_status():
         error_val = err_msg
         error_type_val = err_type
 
-    today_down = state.get("today_down", 0)
-    today_up = state.get("today_up", 0)
+    apps_raw = state.get("apps", {})
+    apps_down_sum = sum(a.get("down", 0) for a in apps_raw.values())
+    apps_up_sum = sum(a.get("up", 0) for a in apps_raw.values())
+
+    today_down = max(state.get("today_down", 0), apps_down_sum)
+    today_up = max(state.get("today_up", 0), apps_up_sum)
     today_date = state.get("date", get_today_str())
 
     # Check if current_rates is fresh (within last 3.5 seconds)
