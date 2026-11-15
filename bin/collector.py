@@ -85,25 +85,28 @@ def is_local_address(addr):
         return True
     return False
 
+def normalize_app_name(name):
+    if not name or name == "<UNKNOWN>":
+        return "<UNKNOWN>"
+    n = name.strip()
+    nl = n.lower()
+    if nl in ("language_server", "antigravity"):
+        return "antigravity"
+    return n
+
 def sanitize_state(data):
     if not isinstance(data, dict):
         return data
     apps = data.get("apps", {})
-    pruned = False
     for bad_name in list(apps.keys()):
         if bad_name.lower() in PROXY_DAEMONS or bad_name == "<UNKNOWN>":
             del apps[bad_name]
-            pruned = True
-    for local_tool in ("antigravity", "npm exec chrome", "npm exec mongod", "node-MainThread"):
-        if local_tool in apps:
-            del apps[local_tool]
-            pruned = True
-    if "language_server" in apps and apps["language_server"].get("up", 0) > apps["language_server"].get("down", 0) + 1048576:
-        apps["language_server"]["up"] = apps["language_server"].get("down", 0) + 1048576
-        pruned = True
-    if pruned and data.get("today_down", 0) == 0:
-        data["today_down"] = sum(a.get("down", 0) for a in apps.values())
-        data["today_up"] = sum(a.get("up", 0) for a in apps.values())
+    # Merge any legacy "language_server" entries into "antigravity"
+    if "language_server" in apps:
+        ls_rec = apps.pop("language_server")
+        ag_rec = apps.setdefault("antigravity", {"down": 0, "up": 0})
+        ag_rec["down"] += ls_rec.get("down", 0)
+        ag_rec["up"] += ls_rec.get("up", 0)
     return data
 
 CONN_REGEX = re.compile(
@@ -348,7 +351,8 @@ def run_daemon():
                     m = CONN_REGEX.match(l)
                     if not m:
                         continue
-                    iface, lport, rhost, rport, proto, up_str, down_str, app_name = m.groups()
+                    iface, lport, rhost, rport, proto, up_str, down_str, raw_app = m.groups()
+                    app_name = normalize_app_name(raw_app)
                     if app_name.lower() not in PROXY_DAEMONS and app_name != "<UNKNOWN>":
                         port_to_app[lport] = (app_name, now)
 
@@ -358,7 +362,8 @@ def run_daemon():
                     m = CONN_REGEX.match(l)
                     if not m:
                         continue
-                    iface, lport, rhost, rport, proto, up_str, down_str, app_name = m.groups()
+                    iface, lport, rhost, rport, proto, up_str, down_str, raw_app = m.groups()
+                    app_name = normalize_app_name(raw_app)
                     up_bytes = int(up_str)
                     down_bytes = int(down_str)
 
@@ -376,7 +381,7 @@ def run_daemon():
                         continue
 
                     if iface == "lo":
-                        # Skip local loopback IPC (e.g. language_server <-> editor)
+                        # Skip local loopback IPC (e.g. localhost, 127.0.0.1)
                         if is_local_address(rhost):
                             continue
                         if up_bytes > 0 or down_bytes > 0:
@@ -433,20 +438,19 @@ def run_daemon():
                     app_record["down"] += d
                     app_record["up"] += u
 
-                # In each tick, total consumed is at least app activity, and at least wire traffic
-                tick_down = max(delta_hw_rx, app_down_bps)
-                tick_up = max(delta_hw_tx, app_up_bps)
+                # Accumulate physical hardware wire traffic
+                if delta_hw_rx > 0 or delta_hw_tx > 0:
+                    state["today_down"] += delta_hw_rx
+                    state["today_up"] += delta_hw_tx
+                else:
+                    state["today_down"] += app_down_bps
+                    state["today_up"] += app_up_bps
 
-                state["today_down"] += tick_down
-                state["today_up"] += tick_up
-
-                # Invariant: Total day usage can never be less than the sum of individual apps
+                # Invariant: Total day usage must bound the sum of individual apps
                 apps_down_sum = sum(a.get("down", 0) for a in state["apps"].values())
                 apps_up_sum = sum(a.get("up", 0) for a in state["apps"].values())
-                if state["today_down"] < apps_down_sum:
-                    state["today_down"] = apps_down_sum
-                if state["today_up"] < apps_up_sum:
-                    state["today_up"] = apps_up_sum
+                state["today_down"] = max(state.get("today_down", 0), apps_down_sum)
+                state["today_up"] = max(state.get("today_up", 0), apps_up_sum)
 
                 state["current_down_bps"] = max(hw_down_bps, app_down_bps)
                 state["current_up_bps"] = max(hw_up_bps, app_up_bps)
