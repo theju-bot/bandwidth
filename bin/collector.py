@@ -23,7 +23,6 @@ if not STATE_DIR.exists() and LEGACY_DIR.exists():
         pass
 
 STATE_FILE = STATE_DIR / "stats.json"
-CONFIG_FILE = STATE_DIR / "config.json"
 LOCK_FILE = STATE_DIR / "daemon.lock"
 
 # Known local proxy and tunnel daemons that forward other applications' traffic.
@@ -185,18 +184,6 @@ def save_state(state):
     STATE_DIR.mkdir(parents=True, exist_ok=True)
     tmp_file = STATE_FILE.with_suffix(".tmp")
     try:
-        # Guarantee monotonicity: today's counters can never regress for the same date
-        if STATE_FILE.exists():
-            try:
-                with open(STATE_FILE, "r", encoding="utf-8") as f:
-                    existing = json.load(f)
-                existing = sanitize_state(existing)
-                if existing.get("date") == state.get("date"):
-                    state["today_down"] = max(state.get("today_down", 0), existing.get("today_down", 0))
-                    state["today_up"] = max(state.get("today_up", 0), existing.get("today_up", 0))
-            except Exception:
-                pass
-
         with open(tmp_file, "w", encoding="utf-8") as f:
             json.dump(state, f)
         os.replace(tmp_file, STATE_FILE)
@@ -213,25 +200,6 @@ def acquire_daemon_lock():
         return lock_fd
     except (BlockingIOError, OSError):
         return None
-
-def load_config():
-    if CONFIG_FILE.exists():
-        try:
-            with open(CONFIG_FILE, "r", encoding="utf-8") as f:
-                return json.load(f)
-        except Exception:
-            pass
-    return {"theme_aware": False}
-
-def save_config(cfg):
-    STATE_DIR.mkdir(parents=True, exist_ok=True)
-    tmp_file = CONFIG_FILE.with_suffix(".tmp")
-    try:
-        with open(tmp_file, "w", encoding="utf-8") as f:
-            json.dump(cfg, f, indent=2)
-        os.replace(tmp_file, CONFIG_FILE)
-    except Exception as e:
-        sys.stderr.write(f"Error saving config: {e}\n")
 
 def check_bandwhich(probe=False):
     bandwhich_path = shutil.which("bandwhich")
@@ -427,6 +395,10 @@ def run_daemon():
                             "total": prev_down + prev_up
                         }
 
+                    sorted_dates = sorted(history.keys(), reverse=True)
+                    if len(sorted_dates) > 30:
+                        history = {d: history[d] for d in sorted_dates[:30]}
+
                     state = {
                         "date": current_today,
                         "today_down": 0,
@@ -580,14 +552,6 @@ def run_status():
             })
     all_apps.sort(key=lambda x: x["total"], reverse=True)
 
-    # Top downloads (sorted down descending)
-    top_downloads = [a for a in all_apps if a["down"] > 0]
-    top_downloads.sort(key=lambda x: x["down"], reverse=True)
-
-    # Top uploads (sorted up descending)
-    top_uploads = [a for a in all_apps if a["up"] > 0]
-    top_uploads.sort(key=lambda x: x["up"], reverse=True)
-
     # Daily history
     history = state.get("history", {})
     days = []
@@ -612,8 +576,6 @@ def run_status():
             "is_today": False
         })
 
-    cfg = load_config()
-
     result = {
         "date": today_date,
         "today_down": today_down,
@@ -625,11 +587,8 @@ def run_status():
         "status": status_val,
         "error": error_val,
         "error_type": error_type_val,
-        "theme_aware": bool(cfg.get("theme_aware", False)),
         "overview_apps": all_apps[:20],
         "current_apps": current_apps,
-        "top_downloads": top_downloads[:8],
-        "top_uploads": top_uploads[:8],
         "days": days[:14]
     }
     print(json.dumps(result))
@@ -641,6 +600,24 @@ def run_self_check():
     assert is_local_address("127.0.0.1") is True
     assert is_local_address("localhost") is True
     assert is_local_address("8.8.8.8") is False
+
+    rx, tx = get_hardware_bytes()
+    assert isinstance(rx, int) and rx >= 0
+    assert isinstance(tx, int) and tx >= 0
+
+    # Test proportional hardware distribution
+    delta_hw = 1000
+    app_down = 400
+    total_app_down = 800
+    assert int(round(delta_hw * (app_down / total_app_down))) == 500
+
+    # Test 30-day history rollover trimming
+    test_hist = {f"2026-01-{i:02d}": {"down": 10, "up": 10, "total": 20} for i in range(1, 35)}
+    sorted_d = sorted(test_hist.keys(), reverse=True)
+    trimmed = {d: test_hist[d] for d in sorted_d[:30]} if len(sorted_d) > 30 else test_hist
+    assert len(trimmed) == 30
+    assert "2026-01-34" in trimmed
+    assert "2026-01-01" not in trimmed
 
     line1 = 'connection: <12345> <lo>:41567 => 127.0.0.1:35334 (tcp) up/down Bps: 100/200 process: "language_server"'
     m = CONN_REGEX.match(line1)
@@ -664,11 +641,5 @@ if __name__ == "__main__":
         sys.exit(0)
     elif len(sys.argv) > 1 and sys.argv[1] == "daemon":
         run_daemon()
-    elif len(sys.argv) > 2 and sys.argv[1] == "set-theme-aware":
-        val = sys.argv[2].lower() in ("1", "true", "yes", "on")
-        cfg = load_config()
-        cfg["theme_aware"] = val
-        save_config(cfg)
-        print(json.dumps({"theme_aware": val}))
     else:
         run_status()

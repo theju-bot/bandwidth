@@ -15,9 +15,9 @@ Daily internet bandwidth monitor plugin for Omarchy / Quickshell. Shows live dai
   - Tooltip provides a quick summary of today's upload/download totals and active transfer speeds.
 
 - **Minimal, Modern Popup Panel**:
-  - **Compact Metric Cards**: Equal-width Upload (purple) and Download (cyan) summary cards with live speed subtext.
-  - **Subtle Daily Total**: Clean, understated total data transferred readout.
-  - **Theme Adaptive Mode**: Discrete top-right toggle switch to dynamically match colors and borders with your active Omarchy system theme.
+  - **Compact Metric Cards**: Equal-width Upload (warm coral) and Download (sky cyan) summary cards with crisp high-contrast values and live speed subtext.
+  - **Native Theme Integration**: Seamlessly matches your active Omarchy system theme accent, popup text, and card borders.
+  - **Subtle Daily Total**: Clean, theme-accented total data transferred readout.
   - **Overview Tab**: Full process breakdown ranked strictly by total bandwidth consumption (Upload + Download, highest consumer first).
   - **Live Activity Tab**: Real-time throughput per process with separate Upload and Download speed columns (ranked by active speed).
   - **Usage History Tab**: Daily bandwidth records archived for the past 30 days.

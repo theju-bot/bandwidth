@@ -71,6 +71,16 @@ BarWidget {
   }
 
   IpcHandler {
+    target: "theju-bot.bandwidth"
+    function open(): void { root.open() }
+    function close(): void { root.close() }
+    function show(): void { root.open() }
+    function hide(): void { root.close() }
+    function toggle(): void { root.togglePanel() }
+    function refresh(): void { root.refresh() }
+  }
+
+  IpcHandler {
     target: "bandwhich-usage"
     function open(): void { root.open() }
     function close(): void { root.close() }
