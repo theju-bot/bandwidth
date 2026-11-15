@@ -38,13 +38,64 @@ Panel {
   property int currentTab: 0
 
   readonly property string fontFamily: Style.font.family
-  readonly property color themeAccent: Color.accent || "#e68e0d"
-  readonly property color fg: Color.popups.text || Color.foreground || "#bebebe"
+  readonly property color themeAccent: Color.accent
+  readonly property color fg: Color.popups.text || Color.foreground
   readonly property color dimFg: Qt.rgba(fg.r, fg.g, fg.b, 0.72)
-  readonly property color downAccent: "#38bdf8"
-  readonly property color upAccent: "#fb923c"
-  readonly property color cardBg: Util.alpha(Color.popups.text || Color.foreground, 0.04)
-  readonly property color cardBorder: Util.alpha(Color.popups.border || Color.foreground, 0.12)
+  readonly property color cardBg: Util.alpha(fg, 0.04)
+  readonly property color cardBorder: Util.alpha(Color.popups.border || themeAccent, 0.12)
+
+  property var themePalette: ({})
+
+  FileView {
+    id: themeColorsFile
+    path: Color.currentThemePath + "/colors.toml"
+    watchChanges: true
+    printErrors: false
+    onLoaded: root.parseThemeColors(text())
+    onFileChanged: reload()
+  }
+
+  Connections {
+    target: Color
+    function onAccentChanged() { themeColorsFile.reload() }
+  }
+
+  function parseThemeColors(raw) {
+    var lines = String(raw || "").split("\n");
+    var pal = {};
+    for (var i = 0; i < lines.length; i++) {
+      var match = lines[i].match(/^\s*([A-Za-z0-9_-]+)\s*=\s*["']?(#[0-9A-Fa-f]{6})/);
+      if (match) {
+        pal[match[1]] = match[2];
+      }
+    }
+    root.themePalette = pal;
+  }
+
+  Component.onCompleted: {
+    if (themeColorsFile.text()) root.parseThemeColors(themeColorsFile.text());
+  }
+
+  readonly property color downAccent: {
+    var p = root.themePalette;
+    var fgStr = root.fg.toString().toLowerCase();
+    if (p.cyan && p.cyan.toLowerCase() !== fgStr) return p.cyan;
+    if (p.blue && p.blue.toLowerCase() !== fgStr) return p.blue;
+    if (p.bright_blue) return p.bright_blue;
+    if (p.bright_cyan && p.bright_cyan.toLowerCase() !== fgStr) return p.bright_cyan;
+    return root.themeAccent;
+  }
+
+  readonly property color upAccent: {
+    var p = root.themePalette;
+    var fgStr = root.fg.toString().toLowerCase();
+    if (p.orange && p.orange.toLowerCase() !== fgStr) return p.orange;
+    if (p.yellow && p.yellow.toLowerCase() !== fgStr) return p.yellow;
+    if (p.bright_yellow) return p.bright_yellow;
+    if (p.magenta && p.magenta.toLowerCase() !== fgStr) return p.magenta;
+    if (Color.urgent) return Color.urgent;
+    return root.themeAccent;
+  }
 
   function refresh() {
     if (!daemonProc.running) daemonProc.running = true;
@@ -347,7 +398,7 @@ Panel {
                 Text {
                   textFormat: Text.PlainText
                   text: "!"
-                  color: "#f87171"
+                  color: Color.urgent
                   font.family: root.fontFamily
                   font.pixelSize: Style.font.body
                   font.bold: true
@@ -357,7 +408,7 @@ Panel {
                   text: root.errorType === "not_installed"
                     ? "bandwhich is not installed"
                     : "Packet capture permission needed"
-                  color: "#f87171"
+                  color: Color.urgent
                   font.family: root.fontFamily
                   font.pixelSize: Style.font.body
                   font.bold: true
@@ -390,7 +441,7 @@ Panel {
                   wrapMode: Text.WrapAnywhere
                   font.family: "monospace"
                   font.pixelSize: Style.font.caption
-                  color: "#68d391"
+                  color: root.themePalette.green || root.themeAccent
                   text: root.errorType === "not_installed"
                     ? "sudo pacman -S bandwhich"
                     : "sudo setcap 'cap_sys_ptrace,cap_dac_read_search,cap_net_raw,cap_net_admin+ep' $(which bandwhich)"
