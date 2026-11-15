@@ -66,8 +66,18 @@ def get_local_hosts():
         h = socket.gethostname().lower()
         hosts.add(h)
         hosts.add(f"{h}.")
-        for ip in socket.gethostbyname_ex(h)[2]:
-            hosts.add(ip)
+    except Exception:
+        pass
+    try:
+        # Non-blocking kernel route lookup: extract local host IPs without DNS
+        with open("/proc/net/fib_trie", "r", encoding="utf-8") as f:
+            prev = ""
+            for line in f:
+                if "host LOCAL" in line:
+                    ip = prev.strip().lstrip("|-+ ")
+                    if ip:
+                        hosts.add(ip)
+                prev = line
     except Exception:
         pass
     return hosts
@@ -515,7 +525,17 @@ def run_status():
 
     # Check if current_rates is fresh (within last 3.5 seconds)
     last_tick = state.get("last_tick_time", 0)
-    is_fresh = (time.time() - last_tick) <= 3.5
+    now = time.time()
+    is_fresh = (now - last_tick) <= 3.5
+
+    # Auto-recover if daemon has stalled with no ticks for >25s
+    if last_tick > 0 and (now - last_tick) > 25 and LOCK_FILE.exists():
+        try:
+            with open(LOCK_FILE, "r") as f:
+                stuck_pid = int(f.read().strip())
+            os.kill(stuck_pid, signal.SIGTERM)
+        except Exception:
+            pass
 
     current_up_bps = state.get("current_up_bps", 0) if is_fresh else 0
     current_down_bps = state.get("current_down_bps", 0) if is_fresh else 0
