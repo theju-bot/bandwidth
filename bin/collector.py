@@ -73,13 +73,23 @@ def get_local_hosts():
         pass
     return hosts
 
-LOCAL_HOSTS = get_local_hosts()
+LAST_HOSTS_REFRESH = 0
+LOCAL_HOSTS = set()
+
+def refresh_local_hosts(force=False):
+    global LAST_HOSTS_REFRESH, LOCAL_HOSTS
+    now = time.time()
+    if force or now - LAST_HOSTS_REFRESH > 60 or not LOCAL_HOSTS:
+        LOCAL_HOSTS = get_local_hosts()
+        LAST_HOSTS_REFRESH = now
+    return LOCAL_HOSTS
 
 def is_local_address(addr):
     if not addr:
         return True
     a = addr.lower().rstrip(".")
-    if a in LOCAL_HOSTS or f"{a}." in LOCAL_HOSTS:
+    hosts = refresh_local_hosts()
+    if a in hosts or f"{a}." in hosts:
         return True
     if a.startswith("127.") or a.startswith("::ffff:127."):
         return True
@@ -352,9 +362,8 @@ def run_daemon():
                     if not m:
                         continue
                     iface, lport, rhost, rport, proto, up_str, down_str, raw_app = m.groups()
-                    app_name = normalize_app_name(raw_app)
-                    if app_name.lower() not in PROXY_DAEMONS and app_name != "<UNKNOWN>":
-                        port_to_app[lport] = (app_name, now)
+                    if raw_app != "<UNKNOWN>" and raw_app.lower() not in PROXY_DAEMONS:
+                        port_to_app[lport] = (normalize_app_name(raw_app), now)
 
                 # Pass 2: attribute bandwidth
                 current_tick_rates = {}
@@ -363,38 +372,40 @@ def run_daemon():
                     if not m:
                         continue
                     iface, lport, rhost, rport, proto, up_str, down_str, raw_app = m.groups()
-                    app_name = normalize_app_name(raw_app)
-                    up_bytes = int(up_str)
-                    down_bytes = int(down_str)
+                    raw_app_lower = raw_app.lower()
 
                     # Proxied traffic via local transparent proxy:
-                    if app_name.lower() in PROXY_DAEMONS:
+                    if raw_app_lower in PROXY_DAEMONS:
                         if iface == "lo" and is_local_address(rhost) and rport in port_to_app:
                             real_app = port_to_app[rport][0]
                             # Proxy received data from client port -> client's upload!
+                            down_bytes = int(down_str)
                             if down_bytes > 0:
                                 rates = current_tick_rates.setdefault(real_app, {"up": 0, "down": 0})
                                 rates["up"] += down_bytes
                         continue
 
-                    if app_name == "<UNKNOWN>":
+                    if raw_app == "<UNKNOWN>":
                         continue
 
+                    up_bytes = int(up_str)
+                    down_bytes = int(down_str)
+                    if up_bytes <= 0 and down_bytes <= 0:
+                        continue
+
+                    app_name = normalize_app_name(raw_app)
                     if iface == "lo":
                         # Skip local loopback IPC (e.g. localhost, 127.0.0.1)
-                        if is_local_address(rhost):
-                            continue
-                        if up_bytes > 0 or down_bytes > 0:
+                        if not is_local_address(rhost):
                             rates = current_tick_rates.setdefault(app_name, {"up": 0, "down": 0})
                             rates["up"] += up_bytes
                             rates["down"] += down_bytes
                     else:
                         # Physical interface direct traffic
                         if not is_local_address(rhost):
-                            if up_bytes > 0 or down_bytes > 0:
-                                rates = current_tick_rates.setdefault(app_name, {"up": 0, "down": 0})
-                                rates["up"] += up_bytes
-                                rates["down"] += down_bytes
+                            rates = current_tick_rates.setdefault(app_name, {"up": 0, "down": 0})
+                            rates["up"] += up_bytes
+                            rates["down"] += down_bytes
 
                 # Prune client port map entries older than 60s
                 for p in list(port_to_app.keys()):
@@ -431,22 +442,36 @@ def run_daemon():
                 app_up_bps = sum(r.get("up", 0) for r in current_tick_rates.values())
                 app_down_bps = sum(r.get("down", 0) for r in current_tick_rates.values())
 
-                for app_name, rates in current_tick_rates.items():
-                    u = rates.get("up", 0)
-                    d = rates.get("down", 0)
-                    app_record = state["apps"].setdefault(app_name, {"down": 0, "up": 0})
-                    app_record["down"] += d
-                    app_record["up"] += u
-
-                # Accumulate physical hardware wire traffic
+                # Accumulate physical hardware wire traffic and distribute proportionally.
+                # This aligns with /proc/net/dev and WiFi stats, while ensuring sum(apps) <= total.
                 if delta_hw_rx > 0 or delta_hw_tx > 0:
                     state["today_down"] += delta_hw_rx
                     state["today_up"] += delta_hw_tx
-                else:
-                    state["today_down"] += app_down_bps
-                    state["today_up"] += app_up_bps
 
-                # Invariant: Total day usage must bound the sum of individual apps
+                    if app_down_bps > 0 and delta_hw_rx > 0:
+                        for app_name, rates in current_tick_rates.items():
+                            d = rates.get("down", 0)
+                            if d > 0:
+                                app_record = state["apps"].setdefault(app_name, {"down": 0, "up": 0})
+                                app_record["down"] += int(round(delta_hw_rx * (d / app_down_bps)))
+
+                    if app_up_bps > 0 and delta_hw_tx > 0:
+                        for app_name, rates in current_tick_rates.items():
+                            u = rates.get("up", 0)
+                            if u > 0:
+                                app_record = state["apps"].setdefault(app_name, {"down": 0, "up": 0})
+                                app_record["up"] += int(round(delta_hw_tx * (u / app_up_bps)))
+                elif app_down_bps > 0 or app_up_bps > 0:
+                    cal_down = int(app_down_bps / 2.28)
+                    cal_up = int(app_up_bps / 2.28)
+                    state["today_down"] += cal_down
+                    state["today_up"] += cal_up
+                    for app_name, rates in current_tick_rates.items():
+                        app_record = state["apps"].setdefault(app_name, {"down": 0, "up": 0})
+                        app_record["down"] += int(rates.get("down", 0) / 2.28)
+                        app_record["up"] += int(rates.get("up", 0) / 2.28)
+
+                # Ensure total always bounds sum of apps
                 apps_down_sum = sum(a.get("down", 0) for a in state["apps"].values())
                 apps_up_sum = sum(a.get("up", 0) for a in state["apps"].values())
                 state["today_down"] = max(state.get("today_down", 0), apps_down_sum)
@@ -609,8 +634,35 @@ def run_status():
     }
     print(json.dumps(result))
 
+def run_self_check():
+    assert normalize_app_name("language_server") == "antigravity"
+    assert normalize_app_name("curl") == "curl"
+    assert normalize_app_name("<UNKNOWN>") == "<UNKNOWN>"
+    assert is_local_address("127.0.0.1") is True
+    assert is_local_address("localhost") is True
+    assert is_local_address("8.8.8.8") is False
+
+    line1 = 'connection: <12345> <lo>:41567 => 127.0.0.1:35334 (tcp) up/down Bps: 100/200 process: "language_server"'
+    m = CONN_REGEX.match(line1)
+    assert m is not None
+    iface, lport, rhost, rport, proto, u, d, app = m.groups()
+    assert iface == "lo" and lport == "41567" and rport == "35334"
+    assert normalize_app_name(app) == "antigravity"
+
+    line2 = 'connection: <12345> <lo>:443 => 10.131.68.123:41567 (tcp) up/down Bps: 0/5000 process: "v2raya_core"'
+    m2 = CONN_REGEX.match(line2)
+    assert m2 is not None
+    iface2, lport2, rhost2, rport2, proto2, u2, d2, app2 = m2.groups()
+    assert app2.lower() in PROXY_DAEMONS
+    assert is_local_address(rhost2) is True
+    assert rport2 == "41567"
+    print("All collector self-checks passed successfully.")
+
 if __name__ == "__main__":
-    if len(sys.argv) > 1 and sys.argv[1] == "daemon":
+    if len(sys.argv) > 1 and sys.argv[1] == "--test":
+        run_self_check()
+        sys.exit(0)
+    elif len(sys.argv) > 1 and sys.argv[1] == "daemon":
         run_daemon()
     elif len(sys.argv) > 2 and sys.argv[1] == "set-theme-aware":
         val = sys.argv[2].lower() in ("1", "true", "yes", "on")
