@@ -507,10 +507,9 @@ Panel {
               Rectangle {
                 visible: root.currentTab === 0
                 anchors.bottom: parent.bottom
-                anchors.horizontalCenter: parent.horizontalCenter
-                width: tab0Txt.implicitWidth
+                anchors.left: parent.left
+                anchors.right: parent.right
                 height: 2
-                radius: 1
                 color: root.downAccent
               }
 
@@ -542,10 +541,9 @@ Panel {
               Rectangle {
                 visible: root.currentTab === 1
                 anchors.bottom: parent.bottom
-                anchors.horizontalCenter: parent.horizontalCenter
-                width: tab1Txt.implicitWidth
+                anchors.left: parent.left
+                anchors.right: parent.right
                 height: 2
-                radius: 1
                 color: root.upAccent
               }
 
@@ -577,10 +575,9 @@ Panel {
               Rectangle {
                 visible: root.currentTab === 2
                 anchors.bottom: parent.bottom
-                anchors.horizontalCenter: parent.horizontalCenter
-                width: tab2Txt.implicitWidth
+                anchors.left: parent.left
+                anchors.right: parent.right
                 height: 2
-                radius: 1
                 color: root.themeAware ? (Color.accent || root.fg) : root.fg
               }
 
