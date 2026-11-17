@@ -8,6 +8,7 @@ import shutil
 import subprocess
 import fcntl
 import signal
+import atexit
 import ctypes
 import socket
 from datetime import date
@@ -266,10 +267,23 @@ def run_daemon():
                     proc.wait(timeout=1)
                 except Exception:
                     pass
+        if lock_fd is not None:
+            try:
+                os.ftruncate(lock_fd, 0)
+                fcntl.flock(lock_fd, fcntl.LOCK_UN)
+                os.close(lock_fd)
+            except Exception:
+                pass
+        try:
+            if LOCK_FILE.exists():
+                LOCK_FILE.unlink(missing_ok=True)
+        except Exception:
+            pass
         os._exit(0)
 
     signal.signal(signal.SIGTERM, handle_exit)
     signal.signal(signal.SIGINT, handle_exit)
+    atexit.register(handle_exit)
 
     bandwhich_bin = shutil.which("bandwhich") or "/usr/bin/bandwhich"
     ok, err_type, err_msg = check_bandwhich(probe=True)
@@ -525,17 +539,7 @@ def run_status():
 
     # Check if current_rates is fresh (within last 3.5 seconds)
     last_tick = state.get("last_tick_time", 0)
-    now = time.time()
-    is_fresh = (now - last_tick) <= 3.5
-
-    # Auto-recover if daemon has stalled with no ticks for >25s
-    if last_tick > 0 and (now - last_tick) > 25 and LOCK_FILE.exists():
-        try:
-            with open(LOCK_FILE, "r") as f:
-                stuck_pid = int(f.read().strip())
-            os.kill(stuck_pid, signal.SIGTERM)
-        except Exception:
-            pass
+    is_fresh = (time.time() - last_tick) <= 3.5
 
     current_up_bps = state.get("current_up_bps", 0) if is_fresh else 0
     current_down_bps = state.get("current_down_bps", 0) if is_fresh else 0
