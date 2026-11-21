@@ -59,6 +59,16 @@ sudo pacman -S bandwhich
 sudo setcap 'cap_sys_ptrace,cap_dac_read_search,cap_net_raw,cap_net_admin+ep' $(which bandwhich)
 ```
 
+> **Security Note on Multi-User Systems**:
+> Granting file capabilities to the binary allows any user account permitted to execute `bandwhich` to inspect network packets and observe socket connections across the host.
+> On shared or multi-user machines, restrict execution to a dedicated trusted group (per [upstream bandwhich install notes](https://github.com/imsnif/bandwhich#linux)):
+> ```bash
+> sudo groupadd -f bandwhich
+> sudo usermod -aG bandwhich $USER
+> sudo chown root:bandwhich $(which bandwhich)
+> sudo chmod 750 $(which bandwhich)
+> ```
+
 ---
 
 ## Installation

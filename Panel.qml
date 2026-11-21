@@ -447,6 +447,17 @@ Panel {
                     : "sudo setcap 'cap_sys_ptrace,cap_dac_read_search,cap_net_raw,cap_net_admin+ep' $(which bandwhich)"
                 }
               }
+
+              Text {
+                textFormat: Text.PlainText
+                width: parent.width
+                wrapMode: Text.Wrap
+                visible: root.errorType !== "not_installed"
+                text: "Multi-user note: To prevent other local accounts from inspecting traffic, restrict binary execution with: sudo chmod 750 $(which bandwhich)"
+                color: root.dimFg
+                font.family: root.fontFamily
+                font.pixelSize: Style.font.caption
+              }
             }
           }
 

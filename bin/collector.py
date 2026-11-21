@@ -14,8 +14,18 @@ import socket
 from datetime import date
 from pathlib import Path
 
+# Enforce secure file permissions: owner-only (rwx------ / rw-------)
+os.umask(0o077)
+
 STATE_DIR = Path.home() / ".local/state/omarchy/theju-bot.bandwidth"
 LEGACY_DIR = Path.home() / ".local/state/omarchy/bandwhich-usage"
+
+# Ensure existing state directory is restricted to owner
+if STATE_DIR.exists():
+    try:
+        os.chmod(STATE_DIR, 0o700)
+    except Exception:
+        pass
 
 if not STATE_DIR.exists() and LEGACY_DIR.exists():
     try:
@@ -192,19 +202,20 @@ def load_state():
     }
 
 def save_state(state):
-    STATE_DIR.mkdir(parents=True, exist_ok=True)
+    STATE_DIR.mkdir(mode=0o700, parents=True, exist_ok=True)
     tmp_file = STATE_FILE.with_suffix(".tmp")
     try:
-        with open(tmp_file, "w", encoding="utf-8") as f:
+        fd = os.open(tmp_file, os.O_CREAT | os.O_WRONLY | os.O_TRUNC, 0o600)
+        with open(fd, "w", encoding="utf-8") as f:
             json.dump(state, f)
         os.replace(tmp_file, STATE_FILE)
     except Exception as e:
         sys.stderr.write(f"Error saving state: {e}\n")
 
 def acquire_daemon_lock():
-    STATE_DIR.mkdir(parents=True, exist_ok=True)
+    STATE_DIR.mkdir(mode=0o700, parents=True, exist_ok=True)
     try:
-        lock_fd = os.open(LOCK_FILE, os.O_CREAT | os.O_RDWR, 0o644)
+        lock_fd = os.open(LOCK_FILE, os.O_CREAT | os.O_RDWR, 0o600)
         fcntl.flock(lock_fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
         os.ftruncate(lock_fd, 0)
         os.write(lock_fd, f"{os.getpid()}\n".encode("utf-8"))
@@ -221,14 +232,14 @@ def check_bandwhich(probe=False):
 
     try:
         proc = subprocess.run(
-            [bandwhich_path, "--raw", "-p"],
+            [bandwhich_path, "--raw", "--no-resolve", "-p"],
             stdout=subprocess.PIPE,
             stderr=subprocess.PIPE,
             text=True,
             timeout=0.6
         )
         if proc.returncode != 0 and "Insufficient permissions" in proc.stderr:
-            return False, "permission", f"Insufficient permissions. Run: sudo setcap 'cap_sys_ptrace,cap_dac_read_search,cap_net_raw,cap_net_admin+ep' {bandwhich_path}"
+            return False, "permission", f"Insufficient permissions. Run: sudo setcap 'cap_sys_ptrace,cap_dac_read_search,cap_net_raw,cap_net_admin+ep' {bandwhich_path} (on multi-user systems, restrict with chmod 750)"
     except subprocess.TimeoutExpired:
         return True, "", ""
     except Exception as e:
@@ -270,15 +281,9 @@ def run_daemon():
         if lock_fd is not None:
             try:
                 os.ftruncate(lock_fd, 0)
-                fcntl.flock(lock_fd, fcntl.LOCK_UN)
                 os.close(lock_fd)
             except Exception:
                 pass
-        try:
-            if LOCK_FILE.exists():
-                LOCK_FILE.unlink(missing_ok=True)
-        except Exception:
-            pass
         os._exit(0)
 
     signal.signal(signal.SIGTERM, handle_exit)
@@ -315,7 +320,7 @@ def run_daemon():
         try:
             err_f = open(err_log, "w", encoding="utf-8")
             proc = subprocess.Popen(
-                [bandwhich_bin, "--raw", "--connections", "-u", "bin-bytes"],
+                [bandwhich_bin, "--raw", "--no-resolve", "--connections", "-u", "bin-bytes"],
                 stdout=subprocess.PIPE,
                 stderr=err_f,
                 text=True,
@@ -512,7 +517,7 @@ def run_daemon():
         if "Insufficient permissions" in stderr_output:
             state["status"] = "error"
             state["error_type"] = "permission"
-            state["error"] = "Insufficient permissions. Run: sudo setcap 'cap_sys_ptrace,cap_dac_read_search,cap_net_raw,cap_net_admin+ep' /usr/bin/bandwhich"
+            state["error"] = "Insufficient permissions. Run: sudo setcap 'cap_sys_ptrace,cap_dac_read_search,cap_net_raw,cap_net_admin+ep' /usr/bin/bandwhich (on multi-user systems, restrict with chmod 750)"
             save_state(state)
 
         time.sleep(2)
